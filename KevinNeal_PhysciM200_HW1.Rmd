@@ -65,24 +65,26 @@ bsMadam <- function(data, reps=10000) {
 leptin <- read.csv(file="Leptin.csv", header=T) #must be in same folder as Rmd file... ugh
 ```
 
-#### a. Display leptin concentrations without regard to time
+#### a. Display leptin concentrations without regard to time  
+Histogram, box plot, and violin plot of 206 leptin concentrations:
 ```{r question a}
 # how do I make captions in markdown?
-lept2 <- leptin[,2] #Just "leptin" column
+lept2 <- leptin[,2] #Just "leptin" column; could also just use leptin$Leptin throughout
 hist(lept2, breaks=10, density=60, freq=F, main="Histogram of leptin concentration", xlab="leptin (ng/mL)", xaxs="i", yaxs="i", tck=0.02)
 curve(dnorm(x, mean=mean(lept2), sd=sd(lept2)), add=T, col="red", lwd=1) # plots normal dist based on mean and stddev of your actual data
 boxplot(lept2, main="Box plot of leptin concentration", ylab="leptin (ng/mL)", tck=0.02)
 vioplot(lept2, horizontal=T) #not clear to me how to title this thing or apply any normal plot args...
 ```
-> Histogram, box plot, and violin plot of 206 leptin concentrations
+
 
 #### b. plot quantiles and determine if Gaussian
-?hist
+
 ```{r question b}
 qqnorm(lept2)
 qqline(lept2)
 ```
 The qqplot shows deviation from a normal/Gaussian distribution, therefore the median and 95% bootstrap confidence intervals are the better descriptors of central tendency and spread, rather than median and standard deviation.
+
 ```{r madam function}
 madam = function(data) {
   med = median(data)
@@ -92,28 +94,35 @@ madam = function(data) {
 ```
 
 ```{r question b, bootstrapping median}
-deals = 10000
-bootmedian = rep(NA, deals)
-for (i in 1:deals) {
-  bootdata = sample(lept2, length(lept2), replace=TRUE)
-  bootmedian[i] = median(bootdata)
-}
-hist(bootmedian)
-median(bootmedian) # 9.1
+bsLeptin <- bsMedian(leptin$Leptin)
+hist(bsLeptin, main="bootstrapped medians of leptin concentrations")
+
+bsLeptinMadam <- bsMadam(leptin$Leptin)
+hist(bsLeptinMadam, main="bootstrapped MADAMs of leptin concentration medians")
+
+# deals = 10000
+# bootmedian = rep(NA, deals)
+# for (i in 1:deals) {
+#   bootdata = sample(lept2, length(lept2), replace=TRUE)
+#   bootmedian[i] = median(bootdata)
+# }
+
+# hist(bootmedian)
+# median(bootmedian) # 9.1
 # 95% Confidence intervals: sort and find 250th and 9750th values
-sortmeds <- sort(bootmedian)
-sortmeds[c(250, 9750)] # 8.8 and 9.4
+# sortmeds <- sort(bootmedian)
+# sortmeds[c(250, 9750)] # 8.8 and 9.4
 
 # MADAM:
-samplemadam = rep(NA, deals)
-for (i in 1:deals) {
-  sampledata = sample(lept2, length(lept2), replace=TRUE)
-  samplemadam[i] = madam(sampledata)
-}
-hist(samplemadam, main="bootstrapped MADAMs of leptin concentrations")
-median(samplemadam)
-sortmadammed <- sort(samplemadam)
-sortmadammed[c(250, 9750)]
+# samplemadam = rep(NA, deals)
+# for (i in 1:deals) {
+#   sampledata = sample(lept2, length(lept2), replace=TRUE)
+#   samplemadam[i] = madam(sampledata)
+# }
+# hist(samplemadam, main="bootstrapped MADAMs of leptin concentrations")
+# median(samplemadam)
+# sortmadammed <- sort(samplemadam)
+# sortmadammed[c(250, 9750)]
 
 ```
 
@@ -126,28 +135,35 @@ __Median of absolute deviation around the median (MADAM): 1.5 (1.30, 1.75)__
 dayleptin <- leptin[which(leptin$Daylight==1),]
 nightleptin <- leptin[which(leptin$Daylight==0),]
 
-deals = 10000
-bootmedDay = rep(NA, deals)
-for (i in 1:deals) {
-  bootdata = sample(dayleptin$Leptin, length(dayleptin$Leptin), replace=TRUE)
-  bootmedDay[i] = median(bootdata)
-}
-#hist(bootmedDay, col="red", main="")
-median(bootmedDay) # 9.2
-# 95% Confidence intervals: sort and find 250th and 9750th values
-sortmedDay <- sort(bootmedDay)
-sortmedDay[c(250, 9750)] # 8.7, 9.7
+bsdayleptin <- bsMedian(dayleptin$Leptin)
+hist(bsdayleptin, main="bootstrapped medians of daytime leptin")
 
-# MADAM:
-samplemadDay = rep(NA, deals)
-for (i in 1:deals) {
-  sampledata = sample(dayleptin$Leptin, length(dayleptin$Leptin), replace=TRUE)
-  samplemadDay[i] = madam(sampledata)
-}
-#hist(samplemadDay, col="red")
-median(samplemadDay) # 1.7
-sortmadDay <- sort(samplemadDay)
-sortmadDay[c(250, 9750)] # 1.4, 1.9
+bsdayleptinMadam <- bsMadam(dayleptin$Leptin)
+hist(bsdayleptinMadam, main="bootstrapped MADAMs of daytime leptin")
+
+
+# deals = 10000
+# bootmedDay = rep(NA, deals)
+# for (i in 1:deals) {
+#   bootdata = sample(dayleptin$Leptin, length(dayleptin$Leptin), replace=TRUE)
+#   bootmedDay[i] = median(bootdata)
+# }
+# #hist(bootmedDay, col="red", main="")
+# median(bootmedDay) # 9.2
+# # 95% Confidence intervals: sort and find 250th and 9750th values
+# sortmedDay <- sort(bootmedDay)
+# sortmedDay[c(250, 9750)] # 8.7, 9.7
+# 
+# # MADAM:
+# samplemadDay = rep(NA, deals)
+# for (i in 1:deals) {
+#   sampledata = sample(dayleptin$Leptin, length(dayleptin$Leptin), replace=TRUE)
+#   samplemadDay[i] = madam(sampledata)
+# }
+# #hist(samplemadDay, col="red")
+# median(samplemadDay) # 1.7
+# sortmadDay <- sort(samplemadDay)
+# sortmadDay[c(250, 9750)] # 1.4, 1.9
 ```
 
 Median of bootstrapped daytime leptin concentration: 9.2 (8.7, 9.7)
@@ -155,28 +171,35 @@ MADAM of bootstrapped daytime leptin concentration: 1.7 (1.4, 1.9)
 
 ```{r question c, night leptin}
 
-deals = 10000
-bootmedNi = rep(NA, deals)
-for (i in 1:deals) {
-  bootdata = sample(nightleptin$Leptin, length(nightleptin$Leptin), replace=TRUE)
-  bootmedNi[i] = median(bootdata)
-}
-hist(bootmedNi, col="blue")
-median(bootmedNi) # 9
-# 95% Confidence intervals: sort and find 250th and 9750th values
-sortmedNi <- sort(bootmedNi)
-sortmedNi[c(250, 9750)] # 8.5, 9.5
+bsnightleptin <- bsMedian(nightleptin$Leptin)
+hist(bsdayleptin, main="bootstrapped medians of nighttime leptin")
 
-# MADAM:
-samplemadNi = rep(NA, deals)
-for (i in 1:deals) {
-  sampledata = sample(nightleptin$Leptin, length(nightleptin$Leptin), replace=TRUE)
-  samplemadNi[i] = madam(sampledata)
-}
-hist(samplemadNi, col="blue")
-median(samplemadNi) # 1.3
-sortmadNi <- sort(samplemadNi)
-sortmadNi[c(250, 9750)] # 0.8, 1.6
+bsnightleptinMadam <- bsMadam(nightleptin$Leptin)
+hist(bsnightleptinMadam, main="bootstrapped MADAMs of nighttime leptin")
+
+# 
+# deals = 10000
+# bootmedNi = rep(NA, deals)
+# for (i in 1:deals) {
+#   bootdata = sample(nightleptin$Leptin, length(nightleptin$Leptin), replace=TRUE)
+#   bootmedNi[i] = median(bootdata)
+# }
+# hist(bootmedNi, col="blue")
+# median(bootmedNi) # 9
+# # 95% Confidence intervals: sort and find 250th and 9750th values
+# sortmedNi <- sort(bootmedNi)
+# sortmedNi[c(250, 9750)] # 8.5, 9.5
+# 
+# # MADAM:
+# samplemadNi = rep(NA, deals)
+# for (i in 1:deals) {
+#   sampledata = sample(nightleptin$Leptin, length(nightleptin$Leptin), replace=TRUE)
+#   samplemadNi[i] = madam(sampledata)
+# }
+# hist(samplemadNi, col="blue")
+# median(samplemadNi) # 1.3
+# sortmadNi <- sort(samplemadNi)
+# sortmadNi[c(250, 9750)] # 0.8, 1.6
 ```
 
 Median of 10000 sampled medians of daytime leptin concentration: 9.2 (8.7, 9.7)
