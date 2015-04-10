@@ -1,0 +1,267 @@
+---
+title: "PhySciM200 Assignment #1"
+author: "Kevin Neal"
+date: "April 8, 2015"
+output: html_document
+---
+
+```{r init, echo=F}
+require(vioplot) || {install.packages("vioplot"); library(vioplot)}
+setwd("C:/Users/Kevin/Google Drive/UCLA Courses or Lab meetings etc/PhysciM200/PSM200_S15_Problem_Set_1")
+
+### Bootstrapping function for sample medians, with 95% CI ###
+# Always prints the median and 95% CI
+# 10,000 bootstrap samples can be assigned to object but won't be printed to screen
+bsMedian <- function(data, reps=10000) {
+  bootmedian <- rep(NA, reps)
+  for (i in 1:reps) {
+    bootdata <- sample(data, length(data), replace=TRUE)
+    bootmedian[i] <- median(bootdata)
+  }
+  sortmeds <- sort(bootmedian)
+  dataname <- deparse(substitute(data)) # changes input data name into a string to be printed to screen
+  cat("Median of ", as.character(reps), " bootstrapped ", dataname, " medians, with 95% CI: ", "\n", 
+      median(bootmedian), " (", sortmeds[0.025*reps], ", ", sortmeds[0.975*reps], ")", sep="") # median of bootstrapped sample distributions/datapoints; report this with 95% CI
+  invisible(bootmedian) #means the 10,000 bootstrap values will not be printed to screen but CAN be assigned to an object as if using return()
+}
+
+### MADAM
+madam <- function(data) {
+  med <- median(data)
+  dev <- median(abs(data-med))
+  return(dev)
+}
+
+### Bootstrapping function for MADAM and output
+bsMadam <- function(data, reps=10000) {
+  bootmadam <- rep(NA, reps)
+  for (i in 1:reps) {
+    bootdata <- sample(data, length(data), replace=TRUE)
+    bootmadam[i] <- madam(bootdata)
+  }
+  sortmadam <- sort(bootmadam)
+  dataname <- deparse(substitute(data)) # changes input data name into a string to be printed to screen
+  cat("MADAM of ", as.character(reps), " bootstrapped ", dataname, " medians, with 95% CI: ", "\n", 
+      median(bootmadam), " (", sortmadam[0.025*reps], ", ", sortmadam[0.975*reps], ")", sep="") # MADAM of bootstrapped sample distributions/datapoints; report this with 95% CI
+  invisible(bootmadam) #means the 10,000 bootstrap values will not be printed to screen but CAN be assigned to an object as if using return()
+}
+
+```
+
+### Part I: Further Reading
+#### Eight ways of describing statistical methods:
+1. Describe how you quantified your results and analyzed your data
+2. State hypothesis you will test and the variables used to test the hypothesis
+3. Consider assumptions made to allow data analysis
+4. State significance level (i.e. which p-value) you chose to indicate statistical significance; justify value chosen; state if one- or two-sided test; and present actual p-value (with appropriate significant figures, e.g. with genomic analyses)
+5. Do not claim groups are equivalent even if you fail to reject the null hypothesis; describe how sample size was determined in order to lessen impact of Type II error
+6. A single global statistic is preferable to repeated pairwise testing; apply corrections for multiple testing and describe method used in correction
+7. Choose methods that account for correlation between repeated (over time) or related/clustered observations
+8. Give name, version, and source of software used to process data
+
+### Part II: Data Analysis
+
+```{r}
+leptin <- read.csv(file="Leptin.csv", header=T) #must be in same folder as Rmd file... ugh
+```
+
+#### a. Display leptin concentrations without regard to time
+```{r question a}
+# how do I make captions in markdown?
+lept2 <- leptin[,2] #Just "leptin" column
+hist(lept2, breaks=10, density=60, freq=F, main="Histogram of leptin concentration", xlab="leptin (ng/mL)", xaxs="i", yaxs="i", tck=0.02)
+curve(dnorm(x, mean=mean(lept2), sd=sd(lept2)), add=T, col="red", lwd=1) # plots normal dist based on mean and stddev of your actual data
+boxplot(lept2, main="Box plot of leptin concentration", ylab="leptin (ng/mL)", tck=0.02)
+vioplot(lept2, horizontal=T) #not clear to me how to title this thing or apply any normal plot args...
+```
+> Histogram, box plot, and violin plot of 206 leptin concentrations
+
+#### b. plot quantiles and determine if Gaussian
+?hist
+```{r question b}
+qqnorm(lept2)
+qqline(lept2)
+```
+The qqplot shows deviation from a normal/Gaussian distribution, therefore the median and 95% bootstrap confidence intervals are the better descriptors of central tendency and spread, rather than median and standard deviation.
+```{r madam function}
+madam = function(data) {
+  med = median(data)
+  dev = median(abs(data-med))
+  return(dev)
+}
+```
+
+```{r question b, bootstrapping median}
+deals = 10000
+bootmedian = rep(NA, deals)
+for (i in 1:deals) {
+  bootdata = sample(lept2, length(lept2), replace=TRUE)
+  bootmedian[i] = median(bootdata)
+}
+hist(bootmedian)
+median(bootmedian) # 9.1
+# 95% Confidence intervals: sort and find 250th and 9750th values
+sortmeds <- sort(bootmedian)
+sortmeds[c(250, 9750)] # 8.8 and 9.4
+
+# MADAM:
+samplemadam = rep(NA, deals)
+for (i in 1:deals) {
+  sampledata = sample(lept2, length(lept2), replace=TRUE)
+  samplemadam[i] = madam(sampledata)
+}
+hist(samplemadam, main="bootstrapped MADAMs of leptin concentrations")
+median(samplemadam)
+sortmadammed <- sort(samplemadam)
+sortmadammed[c(250, 9750)]
+
+```
+
+__Median of bootstrap-sampled medians and 95% CI: 9.1 (8.8, 9.4)__  
+__Median of absolute deviation around the median (MADAM): 1.5 (1.30, 1.75)__  
+
+
+
+```{r question c}
+dayleptin <- leptin[which(leptin$Daylight==1),]
+nightleptin <- leptin[which(leptin$Daylight==0),]
+
+deals = 10000
+bootmedDay = rep(NA, deals)
+for (i in 1:deals) {
+  bootdata = sample(dayleptin$Leptin, length(dayleptin$Leptin), replace=TRUE)
+  bootmedDay[i] = median(bootdata)
+}
+#hist(bootmedDay, col="red", main="")
+median(bootmedDay) # 9.2
+# 95% Confidence intervals: sort and find 250th and 9750th values
+sortmedDay <- sort(bootmedDay)
+sortmedDay[c(250, 9750)] # 8.7, 9.7
+
+# MADAM:
+samplemadDay = rep(NA, deals)
+for (i in 1:deals) {
+  sampledata = sample(dayleptin$Leptin, length(dayleptin$Leptin), replace=TRUE)
+  samplemadDay[i] = madam(sampledata)
+}
+#hist(samplemadDay, col="red")
+median(samplemadDay) # 1.7
+sortmadDay <- sort(samplemadDay)
+sortmadDay[c(250, 9750)] # 1.4, 1.9
+```
+
+Median of bootstrapped daytime leptin concentration: 9.2 (8.7, 9.7)
+MADAM of bootstrapped daytime leptin concentration: 1.7 (1.4, 1.9)
+
+```{r question c, night leptin}
+
+deals = 10000
+bootmedNi = rep(NA, deals)
+for (i in 1:deals) {
+  bootdata = sample(nightleptin$Leptin, length(nightleptin$Leptin), replace=TRUE)
+  bootmedNi[i] = median(bootdata)
+}
+hist(bootmedNi, col="blue")
+median(bootmedNi) # 9
+# 95% Confidence intervals: sort and find 250th and 9750th values
+sortmedNi <- sort(bootmedNi)
+sortmedNi[c(250, 9750)] # 8.5, 9.5
+
+# MADAM:
+samplemadNi = rep(NA, deals)
+for (i in 1:deals) {
+  sampledata = sample(nightleptin$Leptin, length(nightleptin$Leptin), replace=TRUE)
+  samplemadNi[i] = madam(sampledata)
+}
+hist(samplemadNi, col="blue")
+median(samplemadNi) # 1.3
+sortmadNi <- sort(samplemadNi)
+sortmadNi[c(250, 9750)] # 0.8, 1.6
+```
+
+Median of 10000 sampled medians of daytime leptin concentration: 9.2 (8.7, 9.7)
+MADAM of daytime leptin concentration: 1.7 (1.4, 1.9)
+Median of 10000 sampled medians of nighttime leptin: 9.0 (8.5, 9.5)
+MADAM of nighttime leptin concentration: 1.3 (0.8, 1.6) 
+
+
+### for the time-series in questions c and d
+* create a time-series vector for the data. Measurements were taken every 7 minutes, so use an interval of 420 seconds over 24 hours:
+```{r}
+leptin.ts <- seq(as.POSIXct("2013-10-10 08:00:00"), as.POSIXct("2013-10-11 08:00:00"), by=7*60)
+leptin.ts
+# add to leptin object as fourth column named "Date"
+leptin[,4] <- leptin.ts
+colnames(leptin)[4] <- "Date"
+
+# re-split into day and night but now with "Date" column
+dayleptin <- leptin[which(leptin$Daylight==1),]
+nightleptin <- leptin[which(leptin$Daylight==0),]
+
+plot(dayleptin$Date, dayleptin$Leptin, col="red")
+points(nightleptin$Date, nightleptin$Leptin, col="navy")
+```
+
+```{r histograms of bootstrapped medians of night and day leptin concentration}
+hist(bootmedNi, col="blue", xlab="median leptin concentration", main="Bootstrap resampled median Night and day leptin", tck=0.02)
+hist(bootmedDay, col=rgb(1, 0, 0, 0.7), add=T)
+legend("topright", legend=c("night", "day"), fill=c("blue", rgb(1, 0, 0, 0.7)))
+abline(v=median(bootmedNi), lwd=2)
+abline(v=median(bootmedDay), lwd=2)
+box()
+```
+
+The differences in the central tendency descriptors of Daytime vs Nighttime measurements (9.2 vs 9.0), along with the difference in width of the 95% CI's (0.5 vs 0.8), suggests the two are drawn from different distributions. With two distinct clusters of data, then, each cluster ought to be analyzed separately.
+
+#### Question d
+moving average and peak-to-peak 
+```{r question d}
+datlen <- length(leptin$Leptin)
+peaks <- rep(NA, datlen)
+for (i in 2:(datlen - 1)) {
+  isPeak <- leptin$Leptin[i-1] < leptin$Leptin[i] & leptin$Leptin[i] > leptin$Leptin[i+1]
+  if (isPeak) # = TRUE is implicit here
+    peaks[i] <- i
+}
+peaks <- peaks[!is.na(peaks)] # remove unused placeholders
+hist(peaks)
+
+# moving average: take avg of 3 points
+movavg <- rep(NA, datlen)
+for (p in 2:(datlen-1)) {
+  movavg[p] <- mean( leptin$Leptin[ seq(from = p-1, to = p+1, by = 1)])
+}
+movavg <- movavg[!is.na(movavg)] # remove NAs
+# x vector must be same length as movavg when plotting ... do same operations for the date column?
+hist(movavg)
+length(movavg) # length is 204
+
+
+
+# Bootstrapping the moving average dataset
+deals = 10000
+bootmedMavg = rep(NA, deals)
+for (i in 1:deals) {
+  bootdata = sample(movavg, length(movavg), replace=TRUE)
+  bootmedian[i] = median(bootdata)
+}
+hist(bootmedMavg)
+median(bootmedMavg) # 
+# 95% Confidence intervals: sort and find 250th and 9750th values
+sortmedAvg <- sort(bootmedAvg)
+sortmedAvg[c(250, 9750)] # 
+
+# MADAM:
+samplemadam = rep(NA, deals)
+for (i in 1:deals) {
+  sampledata = sample(lept2, length(lept2), replace=TRUE)
+  samplemadam[i] = madam(sampledata)
+}
+hist(samplemadam, main="bootstrapped MADAMs of leptin concentrations")
+median(samplemadam)
+sortmadammed <- sort(samplemadam)
+sortmadammed[c(250, 9750)]
+```
+
+?hist
+# so for question d, plot histogram of bootstraps on separate day and night data
