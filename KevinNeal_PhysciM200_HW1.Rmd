@@ -70,10 +70,12 @@ Histogram, box plot, and violin plot of 206 leptin concentrations:
 ```{r question a}
 # how do I make captions in markdown?
 lept2 <- leptin[,2] #Just "leptin" column; could also just use leptin$Leptin throughout
+par(mfrow=c(2,2))
 hist(lept2, breaks=10, density=60, freq=F, main="Histogram of leptin concentration", xlab="leptin (ng/mL)", xaxs="i", yaxs="i", tck=0.02)
 curve(dnorm(x, mean=mean(lept2), sd=sd(lept2)), add=T, col="red", lwd=1) # plots normal dist based on mean and stddev of your actual data
 boxplot(lept2, main="Box plot of leptin concentration", ylab="leptin (ng/mL)", tck=0.02)
 vioplot(lept2, horizontal=T) #not clear to me how to title this thing or apply any normal plot args...
+par(mfrow=c(1,1))
 ```
 
 
@@ -210,9 +212,9 @@ MADAM of nighttime leptin concentration: 1.3 (0.8, 1.6)
 
 ### for the time-series in questions c and d
 * create a time-series vector for the data. Measurements were taken every 7 minutes, so use an interval of 420 seconds over 24 hours:
+
 ```{r}
 leptin.ts <- seq(as.POSIXct("2013-10-10 08:00:00"), as.POSIXct("2013-10-11 08:00:00"), by=7*60)
-leptin.ts
 # add to leptin object as fourth column named "Date"
 leptin[,4] <- leptin.ts
 colnames(leptin)[4] <- "Date"
@@ -221,16 +223,17 @@ colnames(leptin)[4] <- "Date"
 dayleptin <- leptin[which(leptin$Daylight==1),]
 nightleptin <- leptin[which(leptin$Daylight==0),]
 
-plot(dayleptin$Date, dayleptin$Leptin, col="red")
+plot(dayleptin$Date, dayleptin$Leptin, col="red", main="time-series of leptin measurements", ylab="Leptin concentration", xlab="Time of measurement", tck=0.02)
 points(nightleptin$Date, nightleptin$Leptin, col="navy")
+legend("topright", legend=c("night", "day"), fill=c("navy", "red"))
 ```
 
 ```{r histograms of bootstrapped medians of night and day leptin concentration}
-hist(bootmedNi, col="blue", xlab="median leptin concentration", main="Bootstrap resampled median Night and day leptin", tck=0.02)
-hist(bootmedDay, col=rgb(1, 0, 0, 0.7), add=T)
+hist(bsnightleptin, col=rgb(0,0,1,1), xlab="median leptin concentration", main="Bootstrap resampled median Night and day leptin", tck=0.02, ylim=c(0,4000))
+hist(bsdayleptin, col=rgb(1, 0, 0, 0.7), add=T)
 legend("topright", legend=c("night", "day"), fill=c("blue", rgb(1, 0, 0, 0.7)))
-abline(v=median(bootmedNi), lwd=2)
-abline(v=median(bootmedDay), lwd=2)
+abline(v=median(bsnightleptin), lwd=2)
+abline(v=median(bsdayleptin), lwd=2)
 box()
 ```
 
@@ -262,29 +265,37 @@ length(movavg) # length is 204
 
 
 # Bootstrapping the moving average dataset
-deals = 10000
-bootmedMavg = rep(NA, deals)
-for (i in 1:deals) {
-  bootdata = sample(movavg, length(movavg), replace=TRUE)
-  bootmedian[i] = median(bootdata)
-}
-hist(bootmedMavg)
-median(bootmedMavg) # 
-# 95% Confidence intervals: sort and find 250th and 9750th values
-sortmedAvg <- sort(bootmedAvg)
-sortmedAvg[c(250, 9750)] # 
+bsmedMavg <- bsMedian(movavg)
+bsmadamMavg <- bsMadam(movavg)
 
-# MADAM:
-samplemadam = rep(NA, deals)
-for (i in 1:deals) {
-  sampledata = sample(lept2, length(lept2), replace=TRUE)
-  samplemadam[i] = madam(sampledata)
-}
-hist(samplemadam, main="bootstrapped MADAMs of leptin concentrations")
-median(samplemadam)
-sortmadammed <- sort(samplemadam)
-sortmadammed[c(250, 9750)]
+hist(bsmedMavg, col=rgb(1,0,0,0.7), main="Histograms of raw bootstrapped and moving-averaged bootstraps")
+hist(bsLeptin, col=rgb(0,0,1,0.7), add=T)
+legend("topright", legend=c("raw", "moving avg"), fill=c("blue", rgb(1, 0, 0, 0.7)))
+abline(v=median(bsLeptin), lwd=2)
+abline(v=median(bsmedMavg), lwd=2)
+box()
+
+# deals = 10000
+# bootmedMavg = rep(NA, deals)
+# for (i in 1:deals) {
+#   bootdata = sample(movavg, length(movavg), replace=TRUE)
+#   bootmedian[i] = median(bootdata)
+# }
+# hist(bootmedMavg)
+# median(bootmedMavg) # 
+# # 95% Confidence intervals: sort and find 250th and 9750th values
+# sortmedAvg <- sort(bootmedAvg)
+# sortmedAvg[c(250, 9750)] # 
+# 
+# # MADAM:
+# samplemadam = rep(NA, deals)
+# for (i in 1:deals) {
+#   sampledata = sample(lept2, length(lept2), replace=TRUE)
+#   samplemadam[i] = madam(sampledata)
+# }
+# hist(samplemadam, main="bootstrapped MADAMs of leptin concentrations")
+# median(samplemadam)
+# sortmadammed <- sort(samplemadam)
+# sortmadammed[c(250, 9750)]
 ```
 
-?hist
-# so for question d, plot histogram of bootstraps on separate day and night data
