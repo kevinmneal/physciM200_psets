@@ -89,22 +89,14 @@ castdab.bmean <- apply(castdab, 2, FUN = booter, stat = mean) #  apply() lets yo
 castdab.booted.dims <- dim(castdab.booted)
 castdab.madams <- apply(castdab, 2, FUN = booter, stat = madam)
 # str(rawdat) # shows data type of the columns
-head(castdab[,colnames(castdab)=="wt_Medial"])
-castdab.booted[,"wt_Medial"]
+# head(castdab[,colnames(castdab)=="wt_Medial"])
+# castdab.booted[,"wt_Medial"]
 
-hist(castdab[,"scm_Lateral"])
-hist(castdab.booted[,"scm_Lateral"])
-hist(castdab.madams[,"scm_Lateral"])
+# hist(castdab[,"scm_Lateral"])
+# hist(castdab.booted[,"scm_Lateral"])
+# hist(castdab.madams[,"scm_Lateral"])
 
-
-castdab$scm_Lateral
-
-# plot histograms of ratios for both genotypes in same plot... umm this needs work...
-# ggplot(, aes(x=count,group=genotype,fill=as.factor(genotype))) + 
-#   geom_histogram(position="identity", alpha=0.5, breaks=seq(0,1600, by=200),right=TRUE) +
-#   scale_fill_discrete(name="genotype") +
-#   theme_bw() +
-#   xlab("values")
+# castdab$scm_Lateral
 
 ```
 
@@ -133,26 +125,44 @@ twobox <- function(datA, datB, reps=10000, stat=median, ratio=T) {
     }
   invisible(comparison)
 }
+# colnames(castdab)
+# hist(castdab)
+par(mfrow=c(2,2))
+hist(castdab[,1], main="scm, lateral counts")
+abline(v=median(castdab[,1]))
+hist(castdab[,2], main="scm, medial counts")
+abline(v=median(castdab[,2]))
+hist(castdab[,3], main="wt, lateral counts")
+abline(v=median(castdab[,3]))
+hist(castdab[,4], main="wt, medial counts")
+abline(v=median(castdab[,4]))
 
-hist(castdab)
-hist(castdab[,1])
-hist(castdab[,2])
-hist(castdab[,3])
-hist(castdab[,4])
-
-
+par(mfrow=c(1,1))
 
 scmRatio <- castdab[,"scm_Medial"] / castdab[,"scm_Lateral"]
 scmDiff <- castdab[,"scm_Medial"] - castdab[,"scm_Lateral"]
 wtRatio <- castdab[,"wt_Medial"] / castdab[,"wt_Lateral"]
 wtDiff <- castdab[,"wt_Medial"] - castdab[,"wt_Lateral"]
+```
 
-hist(wtRatio, col=rgb(0, 0, 1, 0.7), xlim=c(0,3.5))
+```{r histograms of ratios of medial to lateral in both genotypes}
+hist(wtRatio, col=rgb(0, 0, 1, 0.7), xlim=c(0,3.5), main="medial to lateral ratios")
 hist(scmRatio, col=rgb(1, 0, 0, 0.7), add=T)
+legend("topright", title="genotype", legend=c("scm", "wt"), fill=c("blue", "red"))
+box()
+```
+
+```{r histograms of differences of medial to lateral in both genotypes}
+hist(wtDiff, col=rgb(0, 0, 1, 0.7), xlim=c(-5,4), main="medial to lateral differences")
+hist(scmDiff, col=rgb(1, 0, 0, 0.7), add=T)
+legend("topright", title="genotype", legend=c("scm", "wt"), fill=c("blue", "red"))
+box()
+```
 
 
-segments(x0=sort(scmRatio)[0.025*length(scmRatio)], y0=0, y1=30, lwd=2)
-segments(x0=sort(scmRatio)[0.975*length(scmRatio)], y0=0, y1=30, lwd=2)
+```{r}
+# segments(x0=sort(scmRatio)[0.025*length(scmRatio)], y0=0, y1=30, lwd=2)
+# segments(x0=sort(scmRatio)[0.975*length(scmRatio)], y0=0, y1=30, lwd=2)
 
 
 compareRatioRatio <-  twobox(scmRatio, wtRatio)
@@ -160,21 +170,22 @@ compareRatioDiff <- twobox(scmRatio, wtRatio, ratio=F)
 compareDiffRatio <- twobox(scmDiff, wtDiff)
 compareDiffDiff <- twobox(scmDiff, wtDiff, ratio=F)
 
-par(mfrow=c(2,2))
-hist(compareRatioRatio)
-hist(compareRatioDiff)
-hist(compareDiffRatio)
-hist(compareDiffDiff)
-vioplot(compareRatioRatio)
-vioplot(compareRatioDiff)
-vioplot(compareDiffDiff)
-vioplot(compareDiffRatio)
+# par(mfrow=c(2,2))
+# hist(compareRatioRatio)
+# hist(compareRatioDiff)
+# hist(compareDiffRatio)
+# hist(compareDiffDiff)
+# # vioplot(compareRatioRatio)
+# # vioplot(compareRatioDiff)
+# # vioplot(compareDiffDiff)
+# # vioplot(compareDiffRatio)
+# par(mfrow=c(1,1))
 
 ```
-?prettyNum
 
 
-```{r, template for transparent histograms. Get code for lines for med and confidence intervals too}
+
+```{r confidence intervals and p-values}
 # 95% CI
 sortCI <- function(bootstraps, reps=10000) {
   sorted <- sort(bootstraps)
@@ -218,6 +229,7 @@ bootpval.2tail <- function(bootdifs, truedif=NULL, ratio=T){
 # sum(compareRatioRatio > abs(rrmed)+1)
 # length(compareRatioRatio[compareRatioRatio < -abs(rrmed)])
 # sum(compareRatioRatio < -abs(rrmed))
+par(mfrow=c(1,1))
 
 rrpval <- bootpval.2tail(compareRatioRatio, truedif=rrmed) # 5e-04
 hist(sort(compareRatioRatio)[1:10000], main="Histogram of ratios of scm ratios to wt ratios (RR)", freq=T)
@@ -262,22 +274,47 @@ abline(v=0.55, lty=2)
 legend("topright", legend=c("ratio", "mirrored ratio", "95% CI"), col=c("purple", "navy", "black"), 
        lty=c(1,1,2), lwd=c(3,3,1))
 
+par(mfrow=c(1,1))
 
-hist(bsnightleptin, col=rgb(0,0,1,1), xlab="median leptin concentration", main="Bootstrap resampled median Night and day leptin", tck=0.02, ylim=c(0,4000))
-hist(bsdayleptin, col=rgb(1, 0, 0, 0.7), add=T)
-legend("topright", legend=c("ratio", "mirrored ratio", "95% CI"), col=c("purple", "navy", "black"), 
-       lty=c(1,1,2), lwd=c(3,3,1))
-abline(v=median(bsnightleptin), lwd=2)
-abline(v=median(bsdayleptin), lwd=2)
-box()
-?abline
-?matlines
-?lines
 ```
 
-look at Khris's histfun() code from the first homework
 
-note: can assign things like hist() to a variable and then plot the histogram object
+```{r effect sizes}
 
-Khris used lateral / median and lateral - medial...
-and then did scm - wt and scm / wt
+effsizeboot <- function(datA, datB, reps=10000, stat=median, ratio=T) {
+  comparison <- rep(NA, reps)
+  if (ratio){
+    for(i in 1:reps){
+      bootA <- sample(datA, length(datA), replace = TRUE)
+      bootB <- sample(datB, length(datB), replace = TRUE)
+      comparison[i] <- median(bootA) / median(bootB)
+    }
+  } else {
+      for(i in 1:reps){
+        bootA <- sample(datA, length(datA), replace = TRUE)
+        bootB <- sample(datB, length(datB), replace = TRUE)
+        comparison[i] <- median(bootA) - median(bootB)
+      }
+    }
+  sortmeds <- sort(comparison)
+  effectsize <- median(comparison)
+  CI <- c(sortmeds[0.025*reps], sortmeds[0.975*reps])
+  cat(effectsize, " (", CI[1], ", ", CI[2], ")", sep="")
+  invisible(effectsize)
+  invisible(CI)
+}
+
+# Zero effect if ratio CI's contain 1; zero effect if difference CI's contain 0
+rreffectboot <- effsizeboot(scmRatio, wtRatio)
+rdeffectboot <- effsizeboot(scmRatio, wtRatio, ratio=F)
+
+dreffectboot <- effsizeboot(scmDiff, wtDiff)
+ddeffectboot <- effsizeboot(scmDiff, wtDiff, ratio=F)
+
+hist(rreffectboot)
+
+```
+
+Effects present in all comparisons!
+
+
