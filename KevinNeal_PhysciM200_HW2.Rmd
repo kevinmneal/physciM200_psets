@@ -1,0 +1,283 @@
+---
+title: "PhySciM200 problem set 2"
+author: "Kevin Neal"
+date: "April 21, 2015"
+output: html_document
+---
+
+```{r init, echo=F}
+require(vioplot) || {install.packages("vioplot"); library(vioplot)}
+require(dplyr)
+require(tidyr)
+require(reshape2)
+
+setwd("C:/Users/Kevin/Google Drive/UCLA Courses or Lab meetings etc/PhysciM200/physciM200_psets")
+
+### Bootstrapping function for sample medians, with 95% CI ###
+# Always prints the median and 95% CI
+# 10,000 bootstrap samples can be assigned to object but won't be printed to screen
+booter <- function(data, reps=10000, stat=NULL, ...) {
+  stat <- if(!is.null(stat)){ match.fun(stat)}
+  bootstat <- rep(NA, reps)
+  for (i in 1:reps) {
+    bootdata <- sample(data, length(data), replace=TRUE)
+    bootstat[i] <- stat(bootdata)
+  }
+  sortmeds <- sort(bootstat)
+  dataname <- deparse(substitute(data)) # changes input data name into a string to be printed to screen
+   statname <- deparse(substitute(stat))
+  cat("median of ", as.character(reps), " bootstrapped ", statname, "s, with 95% CI: ",        median(bootstat), " (", sortmeds[0.025*reps], ", ", sortmeds[0.975*reps], ")", "\n", sep="") # median of bootstrapped sample distributions/datapoints; report this with 95% CI
+  invisible(bootstat) #means the 10,000 bootstrap values will not be printed to screen but CAN be assigned to an object as if using return()
+}
+
+### MADAM
+madam <- function(data, stat="median"){
+  stat <- if(!is.null(stat)){match.fun(stat)}
+  md <- abs(data-median(data))
+  return(stat(md))
+}
+
+# TURNED THIS HIST PLOT INTO A FUNCTION CALLED histfun() # this is Khris's (TA's) creation
+# either have him explain this, or make your own
+#Hist Fun
+histfun<- function(dat, ct, ci, title,
+          xlab="", ylab="", col1="black", col2="Blue", ...){
+lpmain<- hist(dat, plot = F, breaks = "Sturges") #get Histogram data
+  plot(lpmain, ylim = c(0, max(lpmain$counts)+max(lpmain$counts)*0.25),
+      col = ifelse(lpmain$breaks <= lpmain$breaks[
+        which(abs(lpmain$mids - ci[1])==min(abs(lpmain$mids-ci[1])))] |
+          lpmain$breaks >= lpmain$breaks[
+            which(abs(lpmain$mids - ci[2])==min(abs(lpmain$mids-ci[2])))], #if bin
+        col2, #UCLA blue if true
+        col1),
+    main = "", xlab = xlab, ylab = ylab) #UCLA gold if false
+  #getsegment heights
+  ys<- rep(max(lpmain$counts), 3)
+  segments(x0 = c(ct, ci), x1 = c(ct, ci), y0 = rep(0, length(c(ct, ci))), y1 = ys+ys*.08,
+    col = c('black',rep(col2,2)), lwd = 2)
+  text(x = c(ct, ci), y = ys+ys*0.12, c(expression(tilde(x)), expression(paste(Delta,"2.5")), expression(paste(Delta,"97.5"))),
+    cex = 1.1, font = 3, col = c('black', rep(col2, 2)))
+  title(main = title, adj = 0, cex.main = 1.5, font = 4)
+}
+
+```
+
+
+```{r, answering questions for Drummond and Tom}
+
+
+```
+
+```{r, importing and wrangling the data}
+dab1raw <- read.csv("Dab1.csv")
+head(dab1raw)
+str(dab1raw) # genotype and box already read as factors, but in case they weren't:
+# dab1raw$genotype <- with(dab1raw, factor(genotype, levels = c("wt", "scm")))
+# dab1raw$box <- with(dab1raw, factor(box, levels = c("medial", "Lateral")))
+
+# use tidyr to cast data based on factors; acast makes array; dcast makes dataframe
+castdab <- acast(dab1raw, animal~genotype+box, value.var="counts")
+
+```
+
+```{r, bootstrapping median and lateral counts for each genotype}
+# bootstrap all columns of data: scm_Lateral, scm_Medial, wt_Lateral, wt_Medial
+
+# get medians of 10000 bootstrap-resampled datasets
+castdab.booted <- apply(castdab, 2, FUN = booter, stat = median) # in apply(), the 2 refers to applying over columns (1 for rows)
+castdab.bmean <- apply(castdab, 2, FUN = booter, stat = mean) #  apply() lets you bootstrap all the columns at once
+castdab.booted.dims <- dim(castdab.booted)
+castdab.madams <- apply(castdab, 2, FUN = booter, stat = madam)
+# str(rawdat) # shows data type of the columns
+head(castdab[,colnames(castdab)=="wt_Medial"])
+castdab.booted[,"wt_Medial"]
+
+hist(castdab[,"scm_Lateral"])
+hist(castdab.booted[,"scm_Lateral"])
+hist(castdab.madams[,"scm_Lateral"])
+
+
+castdab$scm_Lateral
+
+# plot histograms of ratios for both genotypes in same plot... umm this needs work...
+# ggplot(, aes(x=count,group=genotype,fill=as.factor(genotype))) + 
+#   geom_histogram(position="identity", alpha=0.5, breaks=seq(0,1600, by=200),right=TRUE) +
+#   scale_fill_discrete(name="genotype") +
+#   theme_bw() +
+#   xlab("values")
+
+```
+
+```{r, compare ratio of medial to lateral counts of each genotype to the ratio of them in the other (Two-Box)}
+# datA should be the ratio of medial to lateral in scm
+# datB should be the ratio of medial to lateral in wt
+
+twobox <- function(datA, datB, reps=10000, stat=median, ratio=T) {
+  comparison <- rep(NA, reps)
+  if (ratio){
+    sclA <- datA / median(datA) # with ratios, does it make more sense to do this by dividing by median, or subtracting median and adding 1?
+    sclB <- datB / median(datB) 
+    for(i in 1:reps){
+      bootA <- sample(sclA, length(datA), replace = TRUE)
+      bootB <- sample(sclB, length(datB), replace = TRUE)
+      comparison[i] <- median(bootA) / median(bootB)
+    }
+  } else {
+      sclA <- datA - median(datA) # don't use scale()
+      sclB <- datB - median(datB) 
+      for(i in 1:reps){
+        bootA <- sample(sclA, length(datA), replace = TRUE)
+        bootB <- sample(sclB, length(datB), replace = TRUE)
+        comparison[i] <- median(bootA) - median(bootB)
+      }
+    }
+  invisible(comparison)
+}
+
+hist(castdab)
+hist(castdab[,1])
+hist(castdab[,2])
+hist(castdab[,3])
+hist(castdab[,4])
+
+
+
+scmRatio <- castdab[,"scm_Medial"] / castdab[,"scm_Lateral"]
+scmDiff <- castdab[,"scm_Medial"] - castdab[,"scm_Lateral"]
+wtRatio <- castdab[,"wt_Medial"] / castdab[,"wt_Lateral"]
+wtDiff <- castdab[,"wt_Medial"] - castdab[,"wt_Lateral"]
+
+hist(wtRatio, col=rgb(0, 0, 1, 0.7), xlim=c(0,3.5))
+hist(scmRatio, col=rgb(1, 0, 0, 0.7), add=T)
+
+
+segments(x0=sort(scmRatio)[0.025*length(scmRatio)], y0=0, y1=30, lwd=2)
+segments(x0=sort(scmRatio)[0.975*length(scmRatio)], y0=0, y1=30, lwd=2)
+
+
+compareRatioRatio <-  twobox(scmRatio, wtRatio)
+compareRatioDiff <- twobox(scmRatio, wtRatio, ratio=F)
+compareDiffRatio <- twobox(scmDiff, wtDiff)
+compareDiffDiff <- twobox(scmDiff, wtDiff, ratio=F)
+
+par(mfrow=c(2,2))
+hist(compareRatioRatio)
+hist(compareRatioDiff)
+hist(compareDiffRatio)
+hist(compareDiffDiff)
+vioplot(compareRatioRatio)
+vioplot(compareRatioDiff)
+vioplot(compareDiffDiff)
+vioplot(compareDiffRatio)
+
+```
+?prettyNum
+
+
+```{r, template for transparent histograms. Get code for lines for med and confidence intervals too}
+# 95% CI
+sortCI <- function(bootstraps, reps=10000) {
+  sorted <- sort(bootstraps)
+  cat("95% CI of ", deparse(substitute(bootstraps)), ": ", sep="")
+  return(c(sorted[0.025*reps], sorted[0.975*reps]))
+}
+
+# comparisons <- c(compareRatioRatio, compareRatioDiff, compareDiffRatio, compareDiffDiff)
+# comparisons[1]
+# for (i in 1:4) {
+#   sortCI(comparisons[i])
+# }
+
+# in lab 4 Khris shows these should all be significant...
+rrCI <- sortCI(compareRatioRatio) # 0.917, 1.052
+# Does observed ratio of medians lie within this interval? 
+rrmed <- median(scmRatio) / median(wtRatio) # 0.8459
+# for p-value: find proportion of bootstrap values greater than actual difference PLUS prop of values less than negative of actual difference
+
+# must rescale around 1 to be in line with above, if doing ratio comparison...
+bootpval.2tail <- function(bootdifs, truedif=NULL, ratio=T){
+  if (ratio) {
+    if (truedif > 1) {
+      pval <- sum(bootdifs > truedif) / length(bootdifs) + sum(bootdifs < 2 - truedif) / length(bootdifs)
+    } else {
+      pval <- sum(bootdifs > 2 - truedif) / length(bootdifs) + sum(bootdifs < truedif) / length(bootdifs)
+    }
+  } else {
+  pval <- sum(bootdifs > abs(truedif)) / length(bootdifs) + sum(bootdifs < -abs(truedif)) / length(bootdifs)
+  }
+  cat("p-value: ", pval)
+  invisible(pval)
+}
+
+# testing internal lines above
+# sum(compareRatioDiff > 2 - -0.1433) / length(compareRatioDiff) + sum(compareRatioDiff < -0.1433) / length(compareRatioDiff)
+# sum(compareRatioDiff > abs(-0.1433)) / length(compareRatioDiff) + sum(compareRatioDiff < -abs(-0.1433)) / length(compareRatioDiff)
+
+
+# length(compareRatioRatio[compareRatioRatio > abs(rrmed)])
+# sum(compareRatioRatio > abs(rrmed)+1)
+# length(compareRatioRatio[compareRatioRatio < -abs(rrmed)])
+# sum(compareRatioRatio < -abs(rrmed))
+
+rrpval <- bootpval.2tail(compareRatioRatio, truedif=rrmed) # 5e-04
+hist(sort(compareRatioRatio)[1:10000], main="Histogram of ratios of scm ratios to wt ratios (RR)", freq=T)
+abline(v=rrmed, lwd=3, col="purple") # real ratio
+abline(v=2 - rrmed, lwd=3, col="navy") # real ratio mirrored around 1
+abline(v=0.917, lty=2) # lower CI
+abline(v=1.052, lty=2) # upper CI
+legend("topright", legend=c("ratio", "mirrored ratio", "95% CI"), col=c("purple", "navy", "black"), 
+       lty=c(1,1,2), lwd=c(3,3,1))
+# segments(x0=sort(compareRatioRatio)[0.025*length(scmRatio)], y0=0, y1=2000, lwd=2)
+
+sortCI(compareRatioDiff) # -0.07543, 0.04182
+rdmed <- median(scmRatio) - median(wtRatio) # -0.1433
+rdpval <- bootpval.2tail(compareRatioDiff, truedif=rdmed, ratio=F) # 0.0005
+hist(sort(compareRatioDiff)[1:10000], main="Histogram of differences of scm ratio to wt ratio (RD)", xlim=c(-0.15, 0.15))
+abline(v=rdmed, lwd=3, col="purple")
+abline(v=-rdmed, lwd=3, col="navy")
+abline(v=-0.7532, lty=2)
+abline(v=0.04182, lty=2)
+legend("topright", legend=c("ratio", "mirrored ratio", "95% CI"), col=c("purple", "navy", "black"), 
+       lty=c(1,1,2), lwd=c(3,3,1))
+
+sortCI(compareDiffRatio) # 0.5, 2.844
+drmed <- median(scmDiff) / median(wtDiff) # 3.75
+drpval <- bootpval.2tail(compareDiffRatio, truedif=drmed) # 0.0308
+hist(sort(compareDiffRatio)[75:9925], main="Histogram of ratios of scm differences to wt differences (DR)", freq=T)
+abline(v=drmed, lwd=3, col="purple")
+abline(v=2-drmed, lwd=3, col="navy")
+abline(v=0.5, lty=2)
+abline(v=2.844, lty=2)
+legend("topright", legend=c("ratio", "mirrored ratio", "95% CI"), col=c("purple", "navy", "black"), 
+       lty=c(1,1,2), lwd=c(3,3,1))
+
+sortCI(compareDiffDiff) # -0.45, 0.55
+ddmed <- median(scmDiff) - median(wtDiff)
+ddpval <- bootpval.2tail(compareDiffDiff, truedif=ddmed, ratio=F) # 0.0002
+hist(sort(compareDiffDiff)[1:10000], main="Histogram of differences of scm differences to wt differences (DD)", freq=T)
+abline(v=ddmed, lwd=3, col="purple")
+abline(v=-ddmed, lwd=3, col="navy")
+abline(v=-0.45, lty=2)
+abline(v=0.55, lty=2)
+legend("topright", legend=c("ratio", "mirrored ratio", "95% CI"), col=c("purple", "navy", "black"), 
+       lty=c(1,1,2), lwd=c(3,3,1))
+
+
+hist(bsnightleptin, col=rgb(0,0,1,1), xlab="median leptin concentration", main="Bootstrap resampled median Night and day leptin", tck=0.02, ylim=c(0,4000))
+hist(bsdayleptin, col=rgb(1, 0, 0, 0.7), add=T)
+legend("topright", legend=c("ratio", "mirrored ratio", "95% CI"), col=c("purple", "navy", "black"), 
+       lty=c(1,1,2), lwd=c(3,3,1))
+abline(v=median(bsnightleptin), lwd=2)
+abline(v=median(bsdayleptin), lwd=2)
+box()
+?abline
+?matlines
+?lines
+```
+
+look at Khris's histfun() code from the first homework
+
+note: can assign things like hist() to a variable and then plot the histogram object
+
+Khris used lateral / median and lateral - medial...
+and then did scm - wt and scm / wt
