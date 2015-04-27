@@ -1,11 +1,11 @@
 ---
 title: "PhySciM200 problem set 2"
 author: "Kevin Neal"
-date: "April 21, 2015"
+date: "April 26, 2015"
 output: html_document
 ---
 
-```{r init, echo=F}
+```{r init, echo=F, include=F}
 require(vioplot) || {install.packages("vioplot"); library(vioplot)}
 require(dplyr)
 require(tidyr)
@@ -63,12 +63,17 @@ lpmain<- hist(dat, plot = F, breaks = "Sturges") #get Histogram data
 ```
 
 
-```{r, answering questions for Drummond and Tom}
+### Questions from Drummond and Tom (2011):  
+1. Calculate the p-value of finding the observed difference between two samples by doing resampling; if p-value > 0.05, no significant difference can be claimed  
+2. Larger sample means a better representation of the population and will reduce uncertainty (smaller confidence interval); noise/scatter increases uncertainty by increasing likelihood of different outliers being in different samples and causing their distributions to differ, even if sampled from the same population  
+3. That there is insufficient evidence of a difference in samples, or that the results are consistent with the null hypothesis. I.e. a lack of evidence is not evidence of absence.  
+4. No; one can find statistical significance without  a significant difference in effect; e.g. two frog samples may be significantly different but the difference in their jump distances may be so small that one could not consistently predict whether a single individual from one population would beat the other.  
+5. Effect size is the difference in values between two samples. It differs from NHST by putting an actual number on difference, rather than a simple binary statement of significance.  
 
 
-```
+#### Importing and wrangling the data:
 
-```{r, importing and wrangling the data}
+```{r importing and wrangling the data}
 dab1raw <- read.csv("Dab1.csv")
 head(dab1raw)
 str(dab1raw) # genotype and box already read as factors, but in case they weren't:
@@ -80,7 +85,10 @@ castdab <- acast(dab1raw, animal~genotype+box, value.var="counts")
 
 ```
 
-```{r, bootstrapping median and lateral counts for each genotype}
+
+#### Bootstrapping median and lateral counts for each genotype:
+
+```{r bootstrapping median and lateral counts for each genotype}
 # bootstrap all columns of data: scm_Lateral, scm_Medial, wt_Lateral, wt_Medial
 
 # get medians of 10000 bootstrap-resampled datasets
@@ -100,7 +108,9 @@ castdab.madams <- apply(castdab, 2, FUN = booter, stat = madam)
 
 ```
 
-```{r, compare ratio of medial to lateral counts of each genotype to the ratio of them in the other (Two-Box)}
+#### Comparing ratio or difference of medial to lateral counts of each genotype to the ratio or difference of them in the other (Two-Box):
+
+```{r two-box}
 # datA should be the ratio of medial to lateral in scm
 # datB should be the ratio of medial to lateral in wt
 
@@ -145,12 +155,16 @@ wtRatio <- castdab[,"wt_Medial"] / castdab[,"wt_Lateral"]
 wtDiff <- castdab[,"wt_Medial"] - castdab[,"wt_Lateral"]
 ```
 
+#### Histograms of ratios of medial to lateral in both genotypes:
+
 ```{r histograms of ratios of medial to lateral in both genotypes}
 hist(wtRatio, col=rgb(0, 0, 1, 0.7), xlim=c(0,3.5), main="medial to lateral ratios")
 hist(scmRatio, col=rgb(1, 0, 0, 0.7), add=T)
 legend("topright", title="genotype", legend=c("scm", "wt"), fill=c("blue", "red"))
 box()
 ```
+
+#### Histograms of differences of medial to lateral in both genotypes:
 
 ```{r histograms of differences of medial to lateral in both genotypes}
 hist(wtDiff, col=rgb(0, 0, 1, 0.7), xlim=c(-5,4), main="medial to lateral differences")
@@ -159,6 +173,7 @@ legend("topright", title="genotype", legend=c("scm", "wt"), fill=c("blue", "red"
 box()
 ```
 
+#### Running two-box comparison
 
 ```{r}
 # segments(x0=sort(scmRatio)[0.025*length(scmRatio)], y0=0, y1=30, lwd=2)
@@ -183,7 +198,7 @@ compareDiffDiff <- twobox(scmDiff, wtDiff, ratio=F)
 
 ```
 
-
+#### Confidence intervals and p-values:
 
 ```{r confidence intervals and p-values}
 # 95% CI
@@ -249,7 +264,7 @@ abline(v=rdmed, lwd=3, col="purple")
 abline(v=-rdmed, lwd=3, col="navy")
 abline(v=-0.7532, lty=2)
 abline(v=0.04182, lty=2)
-legend("topright", legend=c("ratio", "mirrored ratio", "95% CI"), col=c("purple", "navy", "black"), 
+legend("topright", legend=c("difference", "mirrored diff", "95% CI"), col=c("purple", "navy", "black"), 
        lty=c(1,1,2), lwd=c(3,3,1))
 
 sortCI(compareDiffRatio) # 0.5, 2.844
@@ -266,18 +281,19 @@ legend("topright", legend=c("ratio", "mirrored ratio", "95% CI"), col=c("purple"
 sortCI(compareDiffDiff) # -0.45, 0.55
 ddmed <- median(scmDiff) - median(wtDiff)
 ddpval <- bootpval.2tail(compareDiffDiff, truedif=ddmed, ratio=F) # 0.0002
-hist(sort(compareDiffDiff)[1:10000], main="Histogram of differences of scm differences to wt differences (DD)", freq=T)
+hist(sort(compareDiffDiff)[1:10000], main="Histogram of differences of scm differences to wt differences (DD)", xlim=c(-1.5, 1.5))
 abline(v=ddmed, lwd=3, col="purple")
 abline(v=-ddmed, lwd=3, col="navy")
 abline(v=-0.45, lty=2)
 abline(v=0.55, lty=2)
-legend("topright", legend=c("ratio", "mirrored ratio", "95% CI"), col=c("purple", "navy", "black"), 
+legend("topright", legend=c("diff", "mirrored diff", "95% CI"), col=c("purple", "navy", "black"), 
        lty=c(1,1,2), lwd=c(3,3,1))
 
 par(mfrow=c(1,1))
 
 ```
 
+#### Effect sizes
 
 ```{r effect sizes}
 
@@ -300,21 +316,22 @@ effsizeboot <- function(datA, datB, reps=10000, stat=median, ratio=T) {
   effectsize <- median(comparison)
   CI <- c(sortmeds[0.025*reps], sortmeds[0.975*reps])
   cat(effectsize, " (", CI[1], ", ", CI[2], ")", sep="")
-  invisible(effectsize)
-  invisible(CI)
+  invisible(list("effectsize"=effectsize, "CI"=CI))
 }
 
 # Zero effect if ratio CI's contain 1; zero effect if difference CI's contain 0
+```
+
+```{r}
 rreffectboot <- effsizeboot(scmRatio, wtRatio)
 rdeffectboot <- effsizeboot(scmRatio, wtRatio, ratio=F)
 
 dreffectboot <- effsizeboot(scmDiff, wtDiff)
 ddeffectboot <- effsizeboot(scmDiff, wtDiff, ratio=F)
 
-hist(rreffectboot)
-
 ```
 
-Effects present in all comparisons!
-
+__Effects present in all comparisons__  
+* For ratios: if distribution includes 1: zero effect
+* For differences: if distribution includes 0: zero effect
 
