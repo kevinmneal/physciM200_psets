@@ -1,0 +1,355 @@
+---
+title: "HW4"
+author: "Kevin Neal"
+date: "May 8, 2015"
+output: 
+  html_document:
+    fig_caption: yes
+    fig_width: 8
+    theme: spacelab
+    toc: yes
+---
+
+```{r init, echo=F, include=F}
+require(vioplot) || {install.packages("vioplot"); library(vioplot)}
+require(dplyr)
+require(tidyr)
+require(reshape2)
+require(minerva)
+require(infotheo)
+require(corrplot)
+
+setwd("C:/Users/Kevin/Google Drive/UCLA Courses or Lab meetings etc/PhysciM200/physciM200_psets")
+
+par(mfrow=c(1,1))
+```
+
+
+## Part I: Further Reading
+
+### Metaanalysis (Nakagawa and Cuthill, 2007)
+
+Summary: The article identifies the need for common use of effect size in biological sciences, noting that NHST alone says nothing about the magnitude of an effect of interest or the precision of that estimate. The authors identify three whays in which NHST can mislead: 1) null hypotheses cannot be true for populations in the real world, except with categorical data; 2) NHST gives undue importance to just one of any number of hypotheses that could be tested; 3) NHST-centric research encourages dismissal rather than probabilistic or likelihood-based assessment of results. The authors note meta-analysis as being an effect-size-based review of research that "naturally thinks outside the limits of NHST."  
+
+How metaanalysis works: Meta-analysis works by combining results from different studies within the same area of research by estimating central tendency and variability of effect sizes across included studies. It necessitates a comparison of effect sizes and confidence intervals, rather than simply looking at p-values.   
+Comments on remarks about multiple regression: The authors note that the predictors included in a multiple regression model will determine the effect size, given that there will be some covariance, and thus it is important to make an informed decision on which predictors to include in the model. The authors identify three approaches usually taken for model selection: the backwards elimination method (based on Occam's razor); Akaike Information Criterion; and a Bayesian approach.  
+
+### Multicollinearity (Slinker and Glantz, 1985)
+Explain multicollinearity and describe some ways to detect and deal with it
+
+
+
+
+# Part II: Data Analysis
+## Multiple Regression Tutorial
+```{r multregr tutorial}
+# using built-in state.x77 dataset
+st <- as.data.frame(state.x77)
+colnames(st)[4] <- "Life.Exp" # getting rid of spaces in column names
+colnames(st)[6] <- "HS.Grad"
+st[,9] <- st$Population*1000 / st$Area # creates new column with these values
+colnames(st)[9] <- "Density" # renames the column I just made
+
+summary(st)
+corrplot(cor(st, method="spearman"))
+pairs(st)
+```
+
+
+### Modeling
+```{r modeling in the tutorial}
+options(show.signif.stars = T) # cuz why not
+names(st)
+model1 <- lm(Life.Exp ~ Population + Income + Illiteracy + Murder + HS.Grad + Frost + Area + Density, data=st)
+summary(model1) # murder and population significant; area and illiteracy worst predictors. Tutorial removes area...
+
+```
+
+### Minimal adequate model
+```{r minimal adequate model}
+# removing variables that do not contribute significantly to model by iteratively removing nonsignificant variables
+
+model2 <- update(model1, .~.-Area) # . keeps same as in model1. Removes Area.
+summary(model2)
+
+anova(model1, model2) # compare the two models
+# see removing "Area" had no significant effect 
+
+# remove variable with next-lowest p-value: Illiteracy
+model3 <- update(model2, .~.-Illiteracy)
+summary(model3) # R-squared went down again, but adjusted R-squared went up (accounts for number of predictors)
+# can also see now that frost is significant, and is now negatively correlated
+
+# remove Income (not significant in model3)
+model4 <- update(model3, .~.-Income)
+summary(model4) # R-squared down slightly, adj. R-squared up. only Density not significant. Remove it.
+
+model5 <- update(model4, .~.-Density)
+summary(model5) # adjusted R-squared decreased this time; can check if it decreased significantly by using anova
+# anova(model5, model4) # returns nonsignificant p-value
+
+# in model5, population is not significant so remove it
+model6 <- update(model5, .~.-Population)
+summary(model6)
+anova(model6, model5) # models not significantly different
+# all remaining predictors (Murder, HS.Grad, and Frost) are significant to the model
+
+```
+
+
+### Stepwise regression
+```{r stepwise regression}
+## Stepwise Regression
+# can automate the previous section using the step() function:
+step(model1, direction="backward")
+# tutorial author is against the output, which by AIC determines Population + Murder + HS.Grad + Frost to be min. adequate model
+
+
+```
+
+
+### Confidence intervals on estimated coefficients
+```{r Confidence limits on estimated coefficients}
+## Confidence limits on estimated coefficients
+confint(model6)
+
+```
+
+
+### Predictions
+```{r Predictions}
+## Predictions
+# predictions can be made from a model equation using predict()
+predict(model6, list(Murder=10.5, HS.Grad=48, Frost=100)) # enter the model name and a list of labeled values for the predictors. Can use vectors.
+
+```
+
+### Regression diagnostics
+```{r Regression diagnostics}
+## Make diagnostic plots
+par(mfrow=c(2,2))
+plot(model6)
+par(mfrow=c(1,1))
+
+```
+
+### Extracting elements of the model object
+```{r Extracting elements of the model object}
+model6[[1]] # extract list item 1: coefficients
+model6[[2]] # extract list item 2: residuals
+sort(model6$resid) # extract residuals in a different way; also sorts them
+
+
+```
+
+### Beta coefficients
+```{r Beta coefficients}
+# Beta/standardized coeffs are the slopes we would get if all the variables were on the same scale. Allows a comparison of relative importance of the predictors, which the unstandardized coefficients and p-values cannot do. Scaling/standardizing can be done using scale()
+model7 <- lm(scale(Life.Exp) ~ scale(Murder) + scale(HS.Grad) + scale(Frost), data=st)
+summary(model7)
+# intercept goes to zero, and slopes become standardized beta values. Shows an increase of one stddev in murder rate is associated with a drop of 0.778 stddev in life expectancy if all other variables are held constant. Can roughly be interpreted as correlations with other predictors controlled.
+
+
+
+```
+
+### Partial correlations
+```{r Partial correlations}
+# another way to remove effect of a possible lurking variable from the correlation of two other variables by calculating a partial correlation...
+### Partial correlation coefficient
+### From formulas in Sheskin, 3e (via tutorial)
+### a,b=variables to be correlated, c=variable to be partialled out of both
+pcor <- function(a,b,c) {
+  (cor(a,b)-cor(a,c)*cor(b,c))/sqrt((1-cor(a,c)^2)*(1-cor(b,c)^2))
+}
+
+pcor(st$Life.Exp, st$Murder, st$HS.Grad) # correlation between Life.Exp and Murder, with HS.Grad held constant
+
+```
+
+# Sepsis data analysis
+
+```{r}
+sep.raw <- read.csv("Sepsis2.csv", header = T, na.strings = c('n','0','bad','?','NA','---','-', ' '))
+sep <- sep.raw[,-1] # removing PID column
+sep <- sep[complete.cases(sep),]
+pairs(sep) # data not Gaussian; use Spearman
+
+#corrplot(cor(sep, use="pairwise.complete.obs", method="spearman")) 
+# corrplot(cor(sep, use="pairwise.complete.obs", method="pearson"))
+#sepnames <- eval(parse(names(sep)))
+#sepnames
+sepmodel1 <- lm(ApacheIII ~ CXCL1 + IL1B + CCL3 + IL6 + TNFa + IL8 + LEP + IL10 + IFNG + CCL2, data=sep)
+summary(sepmodel1)
+
+step(sepmodel1, direction="backward")
+
+# removing variables that do not contribute significantly to model by iteratively removing nonsignificant variables
+
+sepmodel2 <- update(sepmodel1, .~.-IL6) # . keeps same as in model1. Removes IL6.
+summary(sepmodel2)
+
+sepmodel3 <- update(sepmodel2, .~.-CCL2) 
+summary(sepmodel3)
+
+sepmodel4 <- update(sepmodel3, .~.-CCL3) 
+summary(sepmodel4)
+
+sepmodel5 <- update(sepmodel4, .~.-IL1B) 
+summary(sepmodel5)
+
+sepmodel6 <- update(sepmodel5, .~.-IL8) 
+summary(sepmodel6) # almost all predictors significant here. CXCL1 p = 0.078 though. This is the model step() chooses.
+
+sepmodel7 <- update(sepmodel6, .~.-CXCL1)
+summary(sepmodel7) # all predictors significant. TNFa, LEP, IL10, IFNG. Adjusted R-squared goes from 0.58 to 0.55, though
+
+
+plot(sepmodel7)
+sep.sig <- sep[,c(1,6,8,9,10)] # dataframe including APACHEIII and the four singificant predictors
+corrplot(cor(sep.sig, method="spearman"))
+
+```
+
+
+### Comparing coefficients by scaling
+```{r comparing coefficients}
+sepmodel.scale <- lm(scale(ApacheIII) ~ scale(TNFa) + scale(LEP) + scale(IL10) + scale(IFNG), data=sep)
+summary(sepmodel.scale)
+# LEP > IL10 > TNFa > IFNG
+```
+
+### Testing predictive power
+```{r}
+# cross-validate the model; remove points and try to estimate y
+
+```
+
+
+### Bootstrapping
+```{r bootstrapping}
+# bootstrap spearman correlations using replicate()
+draws <- replicate(10000, {
+  i <- sample(nrow(sep.sig), replace=TRUE)
+  data <- sep.sig[i,]
+  cor(data, method="spearman")
+})
+
+#str(draws) 
+#colnames(draws)
+#rownames(draws)
+#draws[,,2]
+#median(draws[2,3,])
+#colnames(draws)[2]
+
+actual.cor <- cor(sep.sig)
+par(mfrow=c(5,5))
+par("mar") # checks current margin dimensions
+par(mar=c(1.5,1,1,1), cex.main=0.8, cex.axis=0.8, cex.lab=0.8, mgp=c(1,0,0))
+# using mfcol plots down instead of across
+# reset with layout(matrix(1))
+
+for(i in 1:5){
+  for(j in 1:5){
+    if(i==j){
+      plot.new()
+    } else {
+    hist(draws[i,j,], main=paste(colnames(draws)[i], "~", colnames(draws)[j]), xlab="")
+    abline(v = quantile(draws[i,j,], c(0.025, 0.975)), col="blue") # blue lines for 95CI
+    abline(v = actual.cor[i,j], col="red") # red line for actual median
+    print(paste(colnames(draws)[i], "~", colnames(draws)[j], ": ", round(median(draws[i,j,]), digits=4), " (", round(sort(draws[i,j,])[0.025*10000], digits=4), ", ", round(sort(draws[i,j,])[0.975*10000], digits=4), ")", sep=""))
+    }
+    
+  }
+}
+
+```
+
+Red lines are observed Spearman correlation coefficients. Blue lines are 95% confidence intervals based on 10,000 bootstraps.
+
+### Null Hypothesis Significance Testing
+```{r NHST}
+cor(sep.sig)
+
+# started this in lab but didn't finish...
+draws.nh <- replicate(10000, {
+  data <- apply(sep.sig, 2, sample) # shuffles data within columns for doing NHST
+  cor(data, method="spearman")
+})
+
+# prints one-sided p-value, using absolute value to account for negative correlations
+sep.pvals <- data.frame(matrix(NA, nrow=5, ncol=5))
+row.names(sep.pvals) <- (colnames(draws.nh))
+str(sep.pvals)
+sep.pvals[] <- NA
+
+for(i in 1:5){
+  for(j in 1:5){
+    if(i==j){
+      plot.new()
+    } else {
+    hist(draws.nh[i,j,], main=paste(colnames(draws.nh)[i], "~", colnames(draws.nh)[j]), xlab="")
+    abline(v = quantile(draws.nh[i,j,], c(0.025, 0.975)), col="blue") # blue lines for 95CI
+    abline(v = actual.cor[i,j], col="red") # red line for actual median
+    sep.pvals[i,j] <- length(draws.nh[i,j,draws.nh[i,j,]>abs(actual.cor[i,j])])/10000
+    #print(paste(colnames(draws.nh)[i], ", ", colnames(draws.nh)[j], (length(draws.nh[i,j,draws.nh[i,j,]>abs(actual.cor[i,j])])/10000)))
+    
+    }
+  }
+}
+colnames(sep.pvals) <- colnames(draws.nh)
+rownames(sep.pvals) <- colnames(draws.nh)
+sep.pvals
+
+```
+Null hypothesis significance testing (null: Spearman correlation is zero). Red lines are observed Spearman correlation coefficients. Blue lines are 95% confidence intervals based on 10,000 bootstraps.  
+Cannot reject null of zero correlation for any Spearman correlations between predictors.  
+Reject null hypothesis of no correlation for ApacheIII ~ INFa; ApacheIII ~ LEP; and ApacheIII ~ IFNG.
+
+
+```{r MIC}
+# MIC tablecolumns:
+# MIC >= x,gives p <= y,+/- (with 95% confidence)
+
+# all original predictors
+#sepMIC <- mine(sep)$MIC
+#micpval <- read.csv("n=35,alpha=0.6.csv", header=T, na.strings = c('n','0','bad','?','NA','---','-', ' ')) # downloaded p-values for n=35
+#par(mfrow=c(1,2))
+#corrplot(mine(sep)$MIC, main="sepsis MIC")
+#corrplot(cor(sep, method="spearman", use="pairwise.complete.obs"), main="spearman")
+
+par(mfrow=c(1,1))
+
+# 4 significant predictors
+sep.sigMIC <- mine(sep.sig)$MIC
+micpval <- read.csv("n=35,alpha=0.6.csv", header=T, na.strings = c('n','0','bad','?','NA','---','-', ' ')) # downloaded p-values for n=35
+par(mfrow=c(1,2))
+corrplot(mine(sep.sig)$MIC, main="sepsis MIC")
+corrplot(cor(sep.sig, method="spearman", use="pairwise.complete.obs"), main="spearman")
+# MIC:
+# IL.1b/IL.10 = 0.2288959; p > 0.05
+# IL.1b/IFN.g = 0.3589710; p < 0.000898
+# IL.10/IFN.g = 0.3296205; p < 0.00518
+
+micpval[(micpval$MIC<(sep.sigMIC[2,1]+0.00001) & micpval$MIC>(sep.sigMIC[2,1]-0.00001)),]
+# min(micpval$MIC) # MIC values in table range from 0.4328 to 0.9207. Anything above 0.9207 has pval = 0 more or less; MIC less than 0.4238 is > 0.05
+mic.pvals <- data.frame(matrix(NA, nrow=5, ncol=5))
+
+#str(mic.pvals)
+
+for(i in 1:5){
+  for(j in 1:5){ 
+    mic.pvals[i,j] <- micpval[which.min(abs(micpval$MIC - sep.sigMIC[i,j])),][2]
+  }
+}
+    
+colnames(mic.pvals) <- colnames(sep.sig)
+rownames(mic.pvals) <- colnames(sep.sig)
+
+mic.pvals[mic.pvals>0.05] <- "NS"
+mic.pvals
+sep.pvals
+```
+
+MIC and bootstrapped Spearman correlations mostly agree, except MIC indicates ApacheIII ~ LEP as NOT significant, while Spearman correlation does.  
+
