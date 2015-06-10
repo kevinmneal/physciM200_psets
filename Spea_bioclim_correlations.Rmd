@@ -1,0 +1,451 @@
+---
+title: "Variable selection for species distribution modeling, and diving into the MaxEnt black box"
+author: "Kevin Neal"
+date: "June 2, 2015"
+output: 
+  html_document:
+    fig_caption: yes
+    fig_width: 8
+---
+
+```{r init, echo=F, include=F}
+require(vioplot) || {install.packages("vioplot"); library(vioplot)}
+require(dplyr)
+require(tidyr)
+require(reshape2)
+require(minerva)
+require(infotheo)
+require(corrplot)
+
+setwd("C:/Users/Kevin/Google Drive/UCLA Courses or Lab meetings etc/PhysciM200/physciM200_psets")
+
+par(mfrow=c(1,1))
+```
+
+## What is Species Distribution Modeling?
+- statistically predict species distribution based on known occurrences and environmental data
+- useful for:
+    - predicting new localities
+    - understanding climatic niche
+    - predicting past and future distributions
+    
+![Species Distribution Modeling](http://i.imgur.com/EHO6XOf.png?1)
+
+## Doing SDM in MaxEnt
+- MaxEnt: Maximum entropy
+- Generally accepted as the best model for presence-only datasets
+- 3 inputs: occurrence points, background points, environmental layers
+  - Can also use "pseudoabsence" points instead of background points
+- program examines environmental values at occurrence points and background points
+- outputs: prediction map, stats on environmental variable importance and model fit
+
+![Species Distribution Modeling](http://i.imgur.com/EHO6XOf.png?1)
+
+## Utility of SDMs:
+- understand environmental contributions to range limits
+- predict range shift under different climate scenarios
+- estimate past range to explore ancient hybridization with currently-allopatric congeners
+
+## spadefoot toad
+- Spea hammondii - western spadefoot toad
+![Spea hammondii](http://i.imgur.com/PsRfF6F.jpg?1)
+
+## spadefoot toad
+- *spadefoot*
+!["spadefoot"](http://i.imgur.com/Au6eyjP.jpg?1)
+
+
+## Species occurrence points
+- GBIF (Global Biodiversity Information Facility)
+- raw GBIF data: 940 occurrences
+- use spatial grid subsampling to limit effect of sampling bias in the model (are number of samples at a given locality a real indicator of habitat suitability, or an artifact?)
+
+## Environmental layers
+- Bioclim variables: biologically-relevant measures of climate
+    - Bio1 to Bio19
+    - e.g. Annual mean temperature (bio1), min temp. of coldest month (bio6), annual precip (bio12), precip of warmest quarter (bio18), etc.
+## Past and present environmental layers
+- can project model fit to current climate data to other climate layers
+
+## Bioclim layers
+- each raster contains a range of values over the map area used in the model
+- imagine all stacked and taking value at a point on top of all - that occurrence point corresponds to a value in all 19 of these layers
+![climate variable values](http://i.imgur.com/2XnNPev.png?1)
+
+## Running the MaxEnt model
+- In addition to prediction maps, can use other methods to test model fit and significance
+- Maxent already implements bootstrapping, for instance, but running it takes awhile
+    - Cross-validation (divide occurrence points into test and training data)
+    - subsampling without replacement
+    - bootstrapping (with replacement)
+    
+## Jackknifing
+- iteratively omit each variable and re-run model to test environmental variable importance
+- can see bio18 (precip of warmest quarter) by itself is the best predictor variable in the model, when I ran it with all 19 variables
+![jackknifing](http://i.imgur.com/o4jH6lo.jpg?1)
+
+## prediction map
+![present distribution](http://i.imgur.com/HILCUgcl.png?1)
+
+## variable contributions
+- bio18: precip of warmest quarter
+- bio19: precip of coldest quarter
+- bio14: precip of driest month
+- bio15: precip seasonality (coeff. of variation)
+![variable contributions](http://i.imgur.com/bEe4FDc.png?1)
+
+## Run model for other scenarios
+![all models](http://i.imgur.com/ec6Ikpp.png?1)
+
+## Hard to really improve on the existing Maxent model...
+- Many publications comparing with other methods; always superior.
+- Goals here, then:
+  - Generate a procedure for removing highly correlated variables
+  - demystify the "black box" that is Maxent!
+
+# Collinearity in environmental variables for species distribution modeling
+
+## To avoid overfitting, want to remove collinear variables before throwing them into the black box
+- overfitting to present conditions could also impact projections on past and future climate scenarios
+
+```{r multregr tutorial, echo=F}
+# using spea and bioclim variables
+spea.ll <- read.csv("speaLatLonBioclim.csv")
+spea.ll <- spea.ll[-1]
+spea <- spea.ll[-c(1:2)] # creates spea.bc which is ONLY bioclim variables, no latlon
+
+#colnames(spea.ll)[1] <- "lon" # simplifying column names
+#colnames(spea.ll)[2] <- "lat"
+spea2 <- spea
+
+present <- rep(0:1, 27)
+spea2[,20] <- present
+colnames(spea2)[20] <- "present"
+#summary(spea)
+#corrplot(cor(spea, method="spearman"))
+#pairs(spea)
+```
+
+
+### Stepwise regression
+```{r modeling in the tutorial}
+#options(show.signif.stars = T) # cuz why not
+#names(spea)
+#model1 <- lm(bio6 ~ bio1 + bio2 + bio3 + bio4 + bio5, data=spea)
+#summary(model1) # murder and population significant; area and illiteracy worst predictors. Tutorial removes area...
+#mine(spea)
+
+# testing this with spea2, which has mislabeled presence points...
+spea.glm <- glm(present ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, data=spea2)
+summary(spea.glm)
+step(spea.glm, direction="backward")
+?step
+
+spea.lm <- lm(present ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, data=spea2)
+summary(spea.lm)
+
+anova(spea.glm, spea.lm)
+# confint()
+```
+
+
+
+
+
+
+
+
+
+### Bootstrapping
+```{r bootstrapping, eval=F}
+### For this with Spea and presence/"absence" data, could shuffle ONLY the presence/absence column ... which is the NHST below I guess
+
+
+# bootstrap spearman correlations using replicate()
+draws <- replicate(1000, {
+  i <- sample(nrow(spea), replace=TRUE)
+  data <- spea[i,]
+  cor(data, method="spearman")
+})
+
+#str(draws) 
+#colnames(draws)
+#rownames(draws)
+#draws[,,2]
+#median(draws[2,3,])
+#colnames(draws)[2]
+
+actual.cor <- cor(spea)
+par(mfrow=c(19,19))
+#par("mar") # checks current margin dimensions
+par(mar=c(1.5,1,1,1), cex.main=0.8, cex.axis=0.8, cex.lab=0.8, mgp=c(1,0,0))
+# using mfcol plots down instead of across
+# reset with layout(matrix(1))
+
+for(i in 1:19){
+  for(j in 1:19){
+    if(i==j){
+      plot.new()
+    } else {
+    hist(draws[i,j,], main=paste(colnames(draws)[i], "~", colnames(draws)[j]), xlab="")
+    abline(v = quantile(draws[i,j,], c(0.025, 0.975)), col="blue") # blue lines for 95CI
+    abline(v = actual.cor[i,j], col="red") # red line for actual median
+    print(paste(colnames(draws)[i], "~", colnames(draws)[j], ": ", round(median(draws[i,j,]), digits=4), " (", round(sort(draws[i,j,])[0.025*1000], digits=4), ", ", round(sort(draws[i,j,])[0.975*1000], digits=4), ")", sep=""))
+    }
+    
+  }
+}
+
+```
+
+Red lines are observed Spearman correlation coefficients. Blue lines are 95% confidence intervals based on 10,000 bootstraps.
+
+### Null Hypothesis Significance Testing
+```{r NHST, eval=F}
+#cor(spea)
+
+draws.nh <- replicate(1000, {
+  data <- apply(spea, 2, sample) # shuffles data within columns for doing NHST
+  cor(data, method="spearman")
+})
+
+# prints one-sided p-value, using absolute value to account for negative correlations
+speabc.pvals <- data.frame(matrix(NA, nrow=19, ncol=19))
+row.names(speabc.pvals) <- (colnames(draws.nh))
+#str(sep.pvals)
+#sep.pvals[] <- NA
+par(mfrow=c(19,19))
+#par("mar") # checks current margin dimensions
+par(mar=c(1.5,1,1,1), cex.main=0.8, cex.axis=0.8, cex.lab=0.8, mgp=c(1,0,0))
+
+for(i in 1:19){
+  for(j in 1:19){
+    if(i==j){
+      plot.new()
+    } else {
+    hist(draws.nh[i,j,], main=paste(colnames(draws.nh)[i], "~", colnames(draws.nh)[j]), xlab="")
+    abline(v = quantile(draws.nh[i,j,], c(0.025, 0.975)), col="blue") # blue lines for 95CI
+    abline(v = actual.cor[i,j], col="red") # red line for actual median
+    speabc.pvals[i,j] <- length(draws.nh[i,j,draws.nh[i,j,]>abs(actual.cor[i,j])])/1000
+    #print(paste(colnames(draws.nh)[i], ", ", colnames(draws.nh)[j], (length(draws.nh[i,j,draws.nh[i,j,]>abs(actual.cor[i,j])])/10000)))
+    
+    }
+  }
+}
+par(mfrow=c(1,1))
+colnames(speabc.pvals) <- colnames(draws.nh)
+rownames(speabc.pvals) <- colnames(draws.nh)
+
+
+```
+Null hypothesis significance testing (null: Spearman correlation is zero). Red lines are observed Spearman correlation coefficients. Blue lines are 95% confidence intervals based on 1000 bootstraps.  
+
+
+```{r MIC}
+# MIC tablecolumns:
+# MIC >= x,gives p <= y,+/- (with 95% confidence)
+
+# all original predictors
+#sepMIC <- mine(sep)$MIC
+#micpval <- read.csv("n=35,alpha=0.6.csv", header=T, na.strings = c('n','0','bad','?','NA','---','-', ' ')) # downloaded p-values for n=35
+#par(mfrow=c(1,2))
+#corrplot(mine(sep)$MIC, main="sepsis MIC")
+#corrplot(cor(sep, method="spearman", use="pairwise.complete.obs"), main="spearman")
+
+#par(mfrow=c(1,1))
+
+# 4 significant predictors
+spea.bioclimMIC <- mine(spea)$MIC
+micpval <- read.csv("n=55,alpha=0.6.csv", header=T, na.strings = c('n','0','bad','?','NA','---','-', ' ')) # downloaded p-values for n=35
+par(mfrow=c(1,2))
+corrplot(mine(spea)$MIC, main="spea MIC")
+corrplot(cor(spea, method="spearman", use="pairwise.complete.obs"), main="spearman")
+# MIC:
+# IL.1b/IL.10 = 0.2288959; p > 0.05
+# IL.1b/IFN.g = 0.3589710; p < 0.000898
+# IL.10/IFN.g = 0.3296205; p < 0.00518
+
+micpval[(micpval$MIC<(spea.bioclimMIC[2,1]+0.00001) & micpval$MIC>(spea.bioclimMIC[2,1]-0.00001)),]
+# min(micpval$MIC) # MIC values in table range from 0.4328 to 0.9207. Anything above 0.9207 has pval = 0 more or less; MIC less than 0.4238 is > 0.05
+mic.pvals <- data.frame(matrix(NA, nrow=19, ncol=19))
+
+#str(mic.pvals)
+
+for(i in 1:19){
+  for(j in 1:19){ 
+    mic.pvals[i,j] <- micpval[which.min(abs(micpval$MIC - spea.bioclimMIC[i,j])),][2]
+  }
+}
+    
+colnames(mic.pvals) <- colnames(spea)
+rownames(mic.pvals) <- colnames(spea)
+
+mic.pvals2 <- mic.pvals
+#mic.pvals2[mic.pvals2>0.05] <- "NS"
+#mic.pvals
+spea.bioclimMIC.high <- spea.bioclimMIC
+#spea.bioclimMIC.high[spea.bioclimMIC.high>=0.7] <- "HIGH"
+
+#write.csv(mic.pvals, file="speaBioclim_MICpvals.csv")
+```
+
+
+
+
+Add the p-value matrix with the MIC value matrix... find cells that are high and significant:
+
+```{r}
+
+sp.MIC.high2 <- spea.bioclimMIC.high
+sp.MIC.high2[sp.MIC.high2>=0.9] <- 800.0 # any high values now equal 800 to make addition with p-value matrix more obvious... and making significant p-values equal 200. So any high and significant cells will equal 1000 when added. Probably a much easier way to do this but whatever
+
+mic.pvals.toadd <- mic.pvals
+mic.pvals.toadd[mic.pvals.toadd<0.005] <- 200.0
+
+sp.MIC.highandsig <- sp.MIC.high2 + mic.pvals.toadd
+
+
+#as.matrix(sp.MIC.high2) + as.matrix(sp.MIC.high2)
+
+#sp.MIC.highandsig <- apply(sp.MIC.high2, 2, FUN=as.numeric) + apply(mic.pvals.toadd, 2, FUN=as.numeric) use when non-numeric
+sp.MIC.highandsig.df <- as.data.frame(sp.MIC.highandsig)
+
+```
+
+
+```{r, eval=F}
+Significant MIC correlations (>0.7, arbitrarily...) with p < 0.005 (arbitrary cutoff... but I can't take everything out...):
+
+bio3-bio4
+bio3-bio7
+bio3-bio9
+bio3-bio10
+bio4-bio5
+bio4-bio7
+bio4-bio9
+bio4-bio10
+bio5-bio9
+bio5-bio10
+bio6-bio8
+bio6-bio10
+bio6-bio11
+bio7-bio9
+bio8-bio11
+bio9-bio10
+bio12-bio13
+bio12-bio16
+bio12-bio19
+bio13-bio16
+bio13-bio19
+bio16-bio19
+
+Significant MIC correlations (>0.9, arbitrarily...) with p < 0.005 (arbitrary cutoff... but I can't take everything out...):
+
+bio3-bio4
+bio4-bio7
+bio5-bio7
+bio9-bio10
+bio12-bio13
+bio12-bio16
+bio12-bio19
+bio13-bio16
+bio13-bio19
+bio16-bio19
+
+number of pairs each biolayer is present in:
+bio3: 1
+bio4: 2
+bio5: 1
+bio7: 2
+bio9: 1
+bio10: 1
+bio12: 4
+bio13: 4
+bio16: 3
+bio19: 3
+```
+
+Sum columns - those with MOST mutual information should be removed? Maybe?
+
+```{r}
+
+
+
+#sum(spea.bioclimMIC[,12])
+#sum(spea.bioclimMIC[,13]) # so 12 has more total mutual info than 13... 
+#sum(spea.bioclimMIC[,1])
+
+speaMICsum <- rep(NA, 19)
+for(i in 1:19){
+  speaMICsum[i] <- sum(spea.bioclimMIC[,i])
+}
+speaMICsum # is this informative though? here, bio4 has the most mutual information... should it be removed, then? does bio14 have the most unique information because it has the lowest total MIC?
+
+```
+
+```{r, echo=F, eval=F, include=F}
+
+
+
+Should I use "presence" as the dependent variable? Do I just score it as 0 = absent and 1 = present and include some pseudoabsence points?
+I could use Maxent values of probability, but that would be circular as fuck. Maybe a priori downweight pseudoabsence points by distance from a presence point so that they aren't all equal to zero...?  
+
+
+Try this out with just presences... so add a column to the original input with just 1's
+```
+
+```{r}
+spea2 <- spea
+
+present <- rep(0:1, 27)
+spea2[,20] <- present
+colnames(spea2)[20] <- "present"
+
+par(mfrow=c(1,2))
+corrplot(mine(spea2)$MIC, main="spea MIC")
+corrplot(cor(spea2, method="spearman", use="pairwise.complete.obs"), main="spearman")
+
+
+# BIO1 = Annual Mean Temperature
+# BIO2 = Mean Diurnal Range (Mean of monthly (max temp - min temp))
+# BIO3 = Isothermality (BIO2/BIO7) (* 100)
+# BIO4 = Temperature Seasonality (standard deviation *100)
+# BIO5 = Max Temperature of Warmest Month
+# BIO6 = Min Temperature of Coldest Month
+# BIO7 = Temperature Annual Range (BIO5-BIO6)
+# BIO8 = Mean Temperature of Wettest Quarter
+# BIO9 = Mean Temperature of Driest Quarter
+# BIO10 = Mean Temperature of Warmest Quarter
+# BIO11 = Mean Temperature of Coldest Quarter
+# BIO12 = Annual Precipitation
+# BIO13 = Precipitation of Wettest Month
+# BIO14 = Precipitation of Driest Month
+# BIO15 = Precipitation Seasonality (Coefficient of Variation)
+# BIO16 = Precipitation of Wettest Quarter
+# BIO17 = Precipitation of Driest Quarter
+# BIO18 = Precipitation of Warmest Quarter
+# BIO19 = Precipitation of Coldest Quarter
+
+## 12, 13, 16, 19 highly correlated! Because almost all of CA's precipitation falls in the wettest month/quarter, which also tends to be the coldest month/quarter
+
+?minerva
+```
+
+## Things to explore further:  
+- using real binary data (1=present, 0=absent; I just randomly made some points absences here for testrun) and methods to deal this binary dependent variable (LASSO? dead/alive)  
+- variable selection with MIC  
+- other machine learning methods (random forests?)  
+- explore other "dimensionality reduction" methods?
+- Does removing correlated variables really affect predictions significantly?
+- Current predictions from MaxEnt already fairly reliable, but overparameterizing could have substantial effects for projections with novel climate scenarios (i.e. combinations of climate variable values not seen in present day) -- this is where the removal of collinear variables seems it would be most useful given the uncertainty of past and present climate models
+
+Things to remove: one of 3 and 4 (probably 4); one of 9 and 10 (probably 10); one of 8 and 11 (probably 11); two or three of 12, 13, 16, and 19 (probably 13 and 19). Then with what's left, maybe keep ONLY "Quarter" and remove its "Month" equivalent? Not 5 and 6 though...
+
+
+### Latest update! June 9, 11pm
+Use this paper's method to use mutinformation to select the best model!: http://research.ics.aalto.fi/eiml/Publications/Publication136.pdf
+
+by iteratively adding variables to the function. Goal is to maximize the information, with X as the variables and Y as the dependent variable (i.e. presence/absence). X is the bioclim variables. You start with running mutinformation() on the whole matrix and see which single variable has the highest mutual information value with the presence variable. This is your first variable selected. Subsequently, you will look for the greatest information addition adding a single other variable. To do this you will use cbind to put two variables in the X argument in mutinformation, and do this across all remaining variables to find the highest combination of information with your first selected variable. Like so:
+
+mutinformation(cbind(discretize(spea[,1]), discretize(spea[,2])), discretize(spea2[,20])) # if here for example we had chosen bio2 as our X1, we add each other bioclim to it to test the information gained. The variable that leads to the highest gain is X2. Then do the same to find X3, and so on. Do this until the information goes DOWN!!! If it never goes down, then the model with all 19 variables is the best...
+
