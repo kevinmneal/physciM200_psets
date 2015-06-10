@@ -446,6 +446,27 @@ Things to remove: one of 3 and 4 (probably 4); one of 9 and 10 (probably 10); on
 Use this paper's method to use mutinformation to select the best model!: http://research.ics.aalto.fi/eiml/Publications/Publication136.pdf
 
 by iteratively adding variables to the function. Goal is to maximize the information, with X as the variables and Y as the dependent variable (i.e. presence/absence). X is the bioclim variables. You start with running mutinformation() on the whole matrix and see which single variable has the highest mutual information value with the presence variable. This is your first variable selected. Subsequently, you will look for the greatest information addition adding a single other variable. To do this you will use cbind to put two variables in the X argument in mutinformation, and do this across all remaining variables to find the highest combination of information with your first selected variable. Like so:
+```{r}
+require(infotheo)
 
 mutinformation(cbind(discretize(spea[,1]), discretize(spea[,2])), discretize(spea2[,20])) # if here for example we had chosen bio2 as our X1, we add each other bioclim to it to test the information gained. The variable that leads to the highest gain is X2. Then do the same to find X3, and so on. Do this until the information goes DOWN!!! If it never goes down, then the model with all 19 variables is the best...
+# this example is still using dummy-absences, though. Get "true"" pseudoabsences AND add more presences by doing smarter spatial sampling... though this is a whole can of worms... 
 
+mutin2 <- rep(NA, 19)
+for (i in 1:19){
+  mutin2[i] <- mutinformation(cbind(discretize(spea[,1]), discretize(spea[,i])), discretize(spea2[,20]))
+}
+
+mutin2 # in this example, bio2 increases the information by the most. So bio2 becomes X2. Now onto 3 variables...
+
+mutin3 <- rep(NA, 19)
+for (i in 1:19){
+  mutin3[i] <- mutinformation(cbind(discretize(spea[,1]), discretize(spea[,2]), discretize(spea[,i])), discretize(spea2[,20]))
+}
+mutin3 # in this example, bio12 adds the most information. Notice bio1 and bio2, which are already included as variables, do not increase the information if added a second time because that information is already there, and the algorithm is smart enough to realize.
+# then we would move on to 4 variables, 5 variables, etc etc...
+# So if you want to make this rigorous, can bootstrap (maybe without replacement because of the spatial autocorrelation stuff...) the mutual information by running 1000 permutations with random subsets of the localities.
+
+# I think the biggest challenge here will be the pseudoabsence selection. Will have to select outside Spea's range to better reflect them as true absences. So do like, 500 random background points on California and surrounding, and then mask out anything in close proximity to true presences.  
+
+```
