@@ -488,7 +488,9 @@ by iteratively adding variables to the function. Goal is to maximize the informa
 ```{r}
 require(infotheo)
 
-mutinformation(discretize(hammy)) # bio1 has highest mutual info
+hammy.mutinfo <- mutinformation(discretize(hammy)) # bio1 has highest mutual info
+corrplot(hammy.mutinfo/max(hammy.mutinfo))
+max(hammy.mutinfo)
 ?mutinformation
 hammybc <- hammy[,-20]
 #mutinformation(discretize(hammybc), discretize(hammy[,20])) # MI = 0.631 including all variables
@@ -498,19 +500,31 @@ mutinformation(cbind(discretize(hammy[,1]), discretize(hammy[,2])), discretize(h
 
 # I can apply bootstraps to every step here... hmm then get confidence intervals on the MI of every added variable? One with highest median moves on?
 
+mutin1 <- rep(NA, 19)
+for (i in 1:19){
+  mutin1[i] <- mutinformation(discretize(hammy[,i]), discretize(hammy[,20]))
+}
+mutin1
+rank(mutin1) # bio1 by itself has most mutual information with presence, so bio1 becomes X1. MI = 0.2386
+
+
+
 mutin2 <- rep(NA, 19)
 for (i in 1:19){
-  mutin2[i] <- mutinformation(cbind(discretize(hammy[,1]), discretize(hammy[,i])), discretize(hammy[,20], nbins=2))
+  mutin2[i] <- mutinformation(cbind(discretize(hammy[,1]), discretize(hammy[,i])), discretize(hammy[,20]))
 }
 
-mutin2 # bio12 increases the information the most, so bio12 becomes X2.
+mutin2 # bio12 increases the information the most, so bio12 becomes X2. MI = 0.3576
 
 
-mutin3 <- matrix(nrow=100, ncol=19)
+mutin3 <- matrix(nrow=1000, ncol=19)
 #mutin3 <- rep(NA, 100)
 
+### PERMUTING the variable selection... but does it make sense to do this vs. using ALL the points? More points = more information... the permuting or bootstrapping should only really be useful if you're trying to decide if sample size affects the variable selection. Right?...
+## Can use unique() with replacement sampling, but this means the sample size will change between replicates.
+## But is that better or worse than pulling a sample of an arbitrary fraction of the total???
 for(j in 1:1000) {
-  hamboot <- rbind(unique(hammy[sample(nrow(hammy[hammy$pres==1,]), 88, replace=T),]), unique(hammy[sample(nrow(hammy[hammy$pres==0,]), 176, replace=T),])) # use unique to avoid weighting certain localities higher than others
+  hamboot <- rbind(hammy[sample(nrow(hammy[hammy$pres==1,]), 50, replace=F),], hammy[sample(nrow(hammy[hammy$pres==0,]), 100, replace=F),]) # use unique to avoid weighting certain localities higher than others
   mutin <- rep(NA, 19)
   for(i in 1:19){
     mutin[i] <- mutinformation(cbind(discretize(hamboot[,1]), discretize(hamboot[,12]), discretize(hamboot[,i])), discretize(hamboot[,20]))
@@ -524,21 +538,9 @@ test.383<- mutinformation(discretize(hamboottest))
 test.384<- mutinformation(discretize(unique(hamboottest)))
 test.383[,20]
 test.384[,20]
-mutinformation(discretize(test.383), discretize(test.384))
+### Yes, as expected, duplicates change the MI. So if goal is to a priori keep localities at same weight, must use unique() or sample without replacement
 
-mutin3 <- replicate(100, {
-  hamboot <- rbind(unique(hammy[sample(nrow(hammy[hammy$pres==1,]), 88, replace=T),]), unique(hammy[sample(nrow(hammy[hammy$pres==0,]), 176, replace=T),]))
-  mutin <- rep(NA, 19)
-  for(i in 1:19){
-    mutin[i] <- mutinformation(cbind(discretize(hamboot[,1]), discretize(hamboot[,12]), discretize(hamboot[,i])), discretize(hamboot[,20]))
-  }
-  j <- 0
-  j <- j + 1
-  mutin3[j,] <- mutin
-})
-
-
-medianCI <- function(data){
+medianCI <- function(data){ # throw in apply() to quickly get the median and 95% CI as a coherent output
   medci <- cbind(median(data), 
         quantile(data, 0.025),
         quantile(data, 0.975))
@@ -546,24 +548,160 @@ medianCI <- function(data){
   return(medci)
 }
 
-mutin3CI2 <- apply(mutin3, 1, medianCI)
-mutin3CI2
+mutin3CI <- apply(mutin3, 2, medianCI)
 mutin3CI
-rank(mutin3CI[1,])
-rank(mutin3CI2[1,])
-mutin3med <- apply(mutin3, 2, median)
-mutin3med
+rank(mutin3CI[1,]) # remember, ranks are backwards!!! so rank ninteenth is the BEST, not first
 
-mutin3 # in this example, bio12 adds the most information. Notice bio1 and bio2, which are already included as variables, do not increase the information if added a second time because that information is already there, and the algorithm is smart enough to realize.
+## Then I suppose, compare the third most-informative variable (X3) determined from permuted medians to the one calculated with ALL the points.
+## Here: permuted best X3 is bio2
+for(i in 1:19){
+    mutin3[i] <- mutinformation(cbind(discretize(hammy[,1]), discretize(hammy[,12]), discretize(hammy[,i])), discretize(hammy[,20]))
+  }
+mutin
+rank(mutin) # Using all the points, the best X3 is bio2; model MI(3) = 0.49495: bio1, bio12, bio2
+
+## Let's just continue using all the points for now...
+
+### Determining X4:
+mutin4 <- rep(NA, 19)
+for(i in 1:19){
+    mutin4[i] <- mutinformation(cbind(discretize(hammy[,1]), 
+                                      discretize(hammy[,12]), 
+                                      discretize(hammy[,2]),
+                                      discretize(hammy[,i])), 
+                                discretize(hammy[,20]))
+  }
+mutin4 
+rank(mutin4) # bio17 is X4; MI = 0.5748
+
+
+### Determining X5:
+mutin5 <- rep(NA, 19)
+for(i in 1:19){
+    mutin5[i] <- mutinformation(cbind(discretize(hammy[,1]), 
+                                      discretize(hammy[,12]), 
+                                      discretize(hammy[,2]),
+                                      discretize(hammy[,17]),
+                                      discretize(hammy[,i])), 
+                                discretize(hammy[,20]))
+  }
+mutin5 
+rank(mutin5) # bio4 is X5; MI = 0.6030
+
+
+
+mutin6 <- rep(NA, 19)
+for(i in 1:19){
+    mutin6[i] <- mutinformation(cbind(discretize(hammy[,1]), 
+                                      discretize(hammy[,12]), 
+                                      discretize(hammy[,2]),
+                                      discretize(hammy[,17]),
+                                      discretize(hammy[,4]),
+                                      discretize(hammy[,i])), 
+                                discretize(hammy[,20]))
+  }
+mutin6 
+rank(mutin6) # bio15 and bio16 are tied for X6; MI = 0.6155... maybe bootstrap to pick one??
+
+mutin6boot <- matrix(nrow=1000, ncol=19)
+for(j in 1:1000) {
+  hamboot <- rbind(hammy[sample(nrow(hammy[hammy$pres==1,]), 88, replace=F),], 
+                   hammy[sample(nrow(hammy[hammy$pres==0,]), 88, replace=F),])
+  mutin <- rep(NA, 19)
+  for(i in 1:19){
+    mutin[i] <- mutinformation(cbind(discretize(hamboot[,1]), 
+                                      discretize(hamboot[,12]), 
+                                      discretize(hamboot[,2]),
+                                      discretize(hamboot[,17]),
+                                      discretize(hamboot[,4]),
+                                      discretize(hamboot[,i])), 
+                                discretize(hamboot[,20]))
+  }
+  mutin6boot[j,] <- mutin
+}
+mutin6CI <- apply(mutin6boot, 2, medianCI)
+mutin6CI # well this didn't help... bio10 has the highest median here... could this be more informative than using all the points?...
+rank(mutin6CI[1,]) # but then these results become incomparable to the other runs! fuuuuuck. So skip bootstrapping for this!! just pick one. 15 or 16. Fuck!!! I'm gonna go with 15 because Maxent put it much higher than 16...
+
+
+mutin7 <- rep(NA, 19)
+for(i in 1:19){
+    mutin7[i] <- mutinformation(cbind(discretize(hammy[,1]), 
+                                      discretize(hammy[,12]), 
+                                      discretize(hammy[,2]),
+                                      discretize(hammy[,17]),
+                                      discretize(hammy[,4]),
+                                      discretize(hammy[,15]),
+                                      discretize(hammy[,i])), 
+                                discretize(hammy[,20]))
+  }
+mutin7
+rank(mutin7) # bio16; MI = 0.626
+
+
+
+mutin8 <- rep(NA, 19)
+for(i in 1:19){
+    mutin8[i] <- mutinformation(cbind(discretize(hammy[,1]), 
+                                      discretize(hammy[,12]), 
+                                      discretize(hammy[,2]),
+                                      discretize(hammy[,17]),
+                                      discretize(hammy[,4]),
+                                      discretize(hammy[,15]),
+                                      discretize(hammy[,16]),
+                                      discretize(hammy[,i])), 
+                                discretize(hammy[,20]))
+  }
+mutin8
+rank(mutin8) # tie: bio11 and bio18; MI = 0.6313. I'll go with bio18 because maxent suggests it is actually the most important variable
+
+
+
+mutin9 <- rep(NA, 19)
+for(i in 1:19){
+    mutin9[i] <- mutinformation(cbind(discretize(hammy[,1]), 
+                                      discretize(hammy[,12]), 
+                                      discretize(hammy[,2]),
+                                      discretize(hammy[,17]),
+                                      discretize(hammy[,4]),
+                                      discretize(hammy[,15]),
+                                      discretize(hammy[,16]),
+                                      discretize(hammy[,18]),
+                                      discretize(hammy[,i])), 
+                                discretize(hammy[,20]))
+  }
+mutin9
+rank(mutin9) # no additional information... so the current model should be the best(?)/most parsimonious, according to MI
+
+# best model using MI: pres ~ bio1, bio2, bio4, bio12, bio15, bio16, bio17, bio18
+
+```
+
+# in this example, bio12 adds the most information. Notice bio1 and bio2, which are already included as variables, do not increase the information if added a second time because that information is already there, and the algorithm is smart enough to realize.
 # then we would move on to 4 variables, 5 variables, etc etc...
 # So if you want to make this rigorous, can bootstrap (maybe without replacement because of the spatial autocorrelation stuff...) the mutual information by running 1000 permutations with random subsets of the localities.
 
 # I think the biggest challenge here will be the pseudoabsence selection. Will have to select outside Spea's range to better reflect them as true absences. So do like, 500 random background points on California and surrounding, and then mask out anything in close proximity to true presences.  
 
 # After using mutinformation to select variables, can test against step() with lm and glm? and other methods? And then run an actual maxent run and compare the results/compare to a full run with 19 variables???  
+Other things I could bootstrap: the actual occurrence points. Wait, didn't I already say I would do that? Yes... but Maxent itself can do that... so idk
+
+# For absence points I'm going to randomly sample ~ 250 points from the background raster, and then clip out anything that falls within a ~10 km radius of presence points... is this biasing it? idk. Maybe use an even smaller radius... so I won't show the full procedure for that here, and will just import the csv file I make from it.
+
+```{r putting the variable selection methods in one place...}
+hammy.glm <- glm(pres ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, family=binomial(link = "logit"), data=hammy)
+summary(hammy.glm)
+step(hammy.glm, direction="backward")
+
+# using step() with glm, get lowest AIC with pres ~ bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19
+
+# best model using MI: pres ~ bio1, bio2, bio4, bio12, bio15, bio16, bio17, bio18
+
 
 ```
 
-Other things I could bootstrap: the actual occurrence points. Wait, didn't I already say I would do that? Yes... but Maxent itself can do that... so idk
+One of the sources suggests that regression techniques do better with LOTS of background/absence points, while machine learning methods do better with fewer (fewer absence than presence). Presumably the method with MI would be machine learning, because it uses information theory...? So should I redo with fewer absence points???
+Barbet-Massin et al. 2012, Methods in Ecol and Evol. "Selecting pseudo-absences for species distribution models: how, where, and how many?"
+"For classification and machine-learning techniques, the number of pseudo-absences had the greatest impact on model accuracy, and averaging several runs with fewer pseudo-absences than for regression techniques yielded the most predictive models.
 
-For absence points I'm going to randomly sample ~ 250 points from the background raster, and then clip out anything that falls within a ~10 km radius of presence points... is this biasing it? idk. Maybe use an even smaller radius... so I won't show the full procedure for that here, and will just import the csv file I make from it.
+# So: best to do permutations with mutual information???
