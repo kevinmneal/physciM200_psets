@@ -694,9 +694,13 @@ summary(hammy.glm)
 step(hammy.glm, direction="backward")
 
 # using step() with glm, get lowest AIC with pres ~ bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19
+hammy.glm.step <- glm(pres ~ bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19, family=binomial(link = "logit"), data=hammy)
+summary(hammy.glm.step)
 
 # best model using MI: pres ~ bio1, bio2, bio4, bio12, bio15, bio16, bio17, bio18
-
+# as an aside: the order you put variables into the glm with + doesn't matter...
+hammy.glm.mi <- glm(pres ~ bio1 + bio12 + bio2 + bio17 + bio4 + bio15 + bio16 + bio18, family=binomial(link = "logit"), data=hammy)
+summary(hammy.glm.mi)
 
 ```
 
