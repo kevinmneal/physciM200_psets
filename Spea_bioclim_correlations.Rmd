@@ -16,10 +16,13 @@ require(reshape2)
 require(minerva)
 require(infotheo)
 require(corrplot)
+require(glmnet)
 
 setwd("C:/Users/Kevin/Google Drive/UCLA Courses or Lab meetings etc/PhysciM200/physciM200_psets")
 
 par(mfrow=c(1,1))
+old.par <- par(mar = c(0, 0, 0, 0))
+par(old.par)
 ```
 
 ## What is Species Distribution Modeling?
@@ -108,47 +111,77 @@ par(mfrow=c(1,1))
 ## To avoid overfitting, want to remove collinear variables before throwing them into the black box
 - overfitting to present conditions could also impact projections on past and future climate scenarios
 
-```{r multregr tutorial, echo=F}
+```{r loading points, echo=F}
 # using spea and bioclim variables
 spea.ll <- read.csv("speaLatLonBioclim.csv")
 spea.ll <- spea.ll[-1]
 spea <- spea.ll[-c(1:2)] # creates spea.bc which is ONLY bioclim variables, no latlon
 
-#colnames(spea.ll)[1] <- "lon" # simplifying column names
-#colnames(spea.ll)[2] <- "lat"
+colnames(spea.ll)[1] <- "lon" # simplifying column names
+colnames(spea.ll)[2] <- "lat"
 spea2 <- spea
 
-present <- rep(0:1, 27)
+present <- rep(1, nrow(spea))
 spea2[,20] <- present
-colnames(spea2)[20] <- "present"
+colnames(spea2)[20] <- "pres"
 #summary(spea)
 #corrplot(cor(spea, method="spearman"))
 #pairs(spea)
+
+### "absence" points (sampled from random background points on same grid as presence points, using chess="black" while presence points sampled from chess="white")
+
+absent.ll <- read.csv("speaabsentLatLonBioclim.csv")
+absent.ll <- absent.ll[-1]
+absent <- absent.ll[,-c(1:2)] # creates dataframe of ONLY bioclim variables, no latlon  
+colnames(absent.ll)[1] <- "lon" # simplifying column names
+colnames(absent.ll)[2] <- "lat"
+absent2 <- absent
+
+absences <- rep(0, nrow(absent))
+absent2[,20] <- absences
+colnames(absent2)[20] <- "pres"
+
+allpts <- rbind(spea2, absent2)
+hammy <- allpts # hammy refers to hammondii. This is the dataframe with all the presence AND absence points AND bioclim values. No latlon.
+hammy.ll <- cbind(hammy, rbind(spea.ll[,c(1:2)], absent.ll[,c(1:2)])) # the dataframe INCLUDING latlon. Probably won't need for now.
+
 ```
 
 
 ### Stepwise regression
-```{r modeling in the tutorial}
+```{r using GLM}
 #options(show.signif.stars = T) # cuz why not
 #names(spea)
 #model1 <- lm(bio6 ~ bio1 + bio2 + bio3 + bio4 + bio5, data=spea)
 #summary(model1) # murder and population significant; area and illiteracy worst predictors. Tutorial removes area...
 #mine(spea)
 
-# testing this with spea2, which has mislabeled presence points...
-spea.glm <- glm(present ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, data=spea2)
-summary(spea.glm)
-step(spea.glm, direction="backward")
-?step
+# With GLM: specify binomial family
 
-spea.lm <- lm(present ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, data=spea2)
-summary(spea.lm)
+family <- binomial(link = "logit")
 
-anova(spea.glm, spea.lm)
+
+# GLM with presence-only:
+#spea.glm <- glm(pres ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, family=binomial(link = "logit"), data=spea2)
+#summary(spea.glm)
+#step(spea.glm, direction="backward") # this fails without absence points. Kind of expected...  
+# step() on presence-only gives best-fit as: pres ~ bio1 + bio2 + bio3 + bio4 + bio5 + bio6 + bio8 + bio9 + bio11 + bio12 + bio14 + bio15 + bio16 + bio18
+
+# GLM with presence and absence:
+hammy.glm <- glm(pres ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, family=binomial(link = "logit"), data=hammy)
+summary(hammy.glm)
+step(hammy.glm, direction="backward")
+
+# step() using the logistic glm with OLDER data gives best-fit as: pres ~  bio8 + bio9 + bio10 + bio11 + bio14 + bio15 + bio18 + bio19
+# newer one with fewer absences: bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19
+plot(hammy.glm)
+
+plot(pres~bio8+bio9, data=hammy)
+# anova(spea.glm, spea.lm)
 # confint()
+# predict(hammy.glm, type="response") # confusing...
+
 ```
-
-
 
 
 
@@ -241,6 +274,15 @@ rownames(speabc.pvals) <- colnames(draws.nh)
 Null hypothesis significance testing (null: Spearman correlation is zero). Red lines are observed Spearman correlation coefficients. Blue lines are 95% confidence intervals based on 1000 bootstraps.  
 
 
+```{r}
+
+hist(spea2[,1], col="red")
+par(mfrow=c(1,2))
+hist(absent2[,1], col="blue")
+
+
+```
+
 ```{r MIC}
 # MIC tablecolumns:
 # MIC >= x,gives p <= y,+/- (with 95% confidence)
@@ -255,15 +297,12 @@ Null hypothesis significance testing (null: Spearman correlation is zero). Red l
 #par(mfrow=c(1,1))
 
 # 4 significant predictors
-spea.bioclimMIC <- mine(spea)$MIC
+spea.bioclimMIC <- mine(hammy)$MIC
 micpval <- read.csv("n=55,alpha=0.6.csv", header=T, na.strings = c('n','0','bad','?','NA','---','-', ' ')) # downloaded p-values for n=35
 par(mfrow=c(1,2))
-corrplot(mine(spea)$MIC, main="spea MIC")
-corrplot(cor(spea, method="spearman", use="pairwise.complete.obs"), main="spearman")
-# MIC:
-# IL.1b/IL.10 = 0.2288959; p > 0.05
-# IL.1b/IFN.g = 0.3589710; p < 0.000898
-# IL.10/IFN.g = 0.3296205; p < 0.00518
+corrplot(mine(hammy)$MIC, main="spea MIC")
+corrplot(cor(hammy, method="spearman", use="pairwise.complete.obs"), main="spearman")
+
 
 micpval[(micpval$MIC<(spea.bioclimMIC[2,1]+0.00001) & micpval$MIC>(spea.bioclimMIC[2,1]-0.00001)),]
 # min(micpval$MIC) # MIC values in table range from 0.4328 to 0.9207. Anything above 0.9207 has pval = 0 more or less; MIC less than 0.4238 is > 0.05
@@ -449,24 +488,82 @@ by iteratively adding variables to the function. Goal is to maximize the informa
 ```{r}
 require(infotheo)
 
-mutinformation(cbind(discretize(spea[,1]), discretize(spea[,2])), discretize(spea2[,20])) # if here for example we had chosen bio2 as our X1, we add each other bioclim to it to test the information gained. The variable that leads to the highest gain is X2. Then do the same to find X3, and so on. Do this until the information goes DOWN!!! If it never goes down, then the model with all 19 variables is the best...
+mutinformation(discretize(hammy)) # bio1 has highest mutual info
+?mutinformation
+hammybc <- hammy[,-20]
+#mutinformation(discretize(hammybc), discretize(hammy[,20])) # MI = 0.631 including all variables
+
+mutinformation(cbind(discretize(hammy[,1]), discretize(hammy[,2])), discretize(hammy[,20], nbins=2)) # if here for example we had chosen bio2 as our X1, we add each other bioclim to it to test the information gained. The variable that leads to the highest gain is X2. Then do the same to find X3, and so on. Do this until the information goes DOWN!!! If it never goes down, then the model with all 19 variables is the best...
 # this example is still using dummy-absences, though. Get "true"" pseudoabsences AND add more presences by doing smarter spatial sampling... though this is a whole can of worms... 
+
+# I can apply bootstraps to every step here... hmm then get confidence intervals on the MI of every added variable? One with highest median moves on?
 
 mutin2 <- rep(NA, 19)
 for (i in 1:19){
-  mutin2[i] <- mutinformation(cbind(discretize(spea[,1]), discretize(spea[,i])), discretize(spea2[,20]))
+  mutin2[i] <- mutinformation(cbind(discretize(hammy[,1]), discretize(hammy[,i])), discretize(hammy[,20], nbins=2))
 }
 
-mutin2 # in this example, bio2 increases the information by the most. So bio2 becomes X2. Now onto 3 variables...
+mutin2 # bio12 increases the information the most, so bio12 becomes X2.
 
-mutin3 <- rep(NA, 19)
-for (i in 1:19){
-  mutin3[i] <- mutinformation(cbind(discretize(spea[,1]), discretize(spea[,2]), discretize(spea[,i])), discretize(spea2[,20]))
+
+mutin3 <- matrix(nrow=100, ncol=19)
+#mutin3 <- rep(NA, 100)
+
+for(j in 1:1000) {
+  hamboot <- rbind(unique(hammy[sample(nrow(hammy[hammy$pres==1,]), 88, replace=T),]), unique(hammy[sample(nrow(hammy[hammy$pres==0,]), 176, replace=T),])) # use unique to avoid weighting certain localities higher than others
+  mutin <- rep(NA, 19)
+  for(i in 1:19){
+    mutin[i] <- mutinformation(cbind(discretize(hamboot[,1]), discretize(hamboot[,12]), discretize(hamboot[,i])), discretize(hamboot[,20]))
+  }
+  mutin3[j,] <- mutin
 }
+
+# do duplicates affect MI?
+hamboottest <- rbind(hammy[sample(nrow(hammy[hammy$pres==1,]), 88, replace=T),], hammy[sample(nrow(hammy[hammy$pres==0,]), 176, replace=T),])
+test.383<- mutinformation(discretize(hamboottest))
+test.384<- mutinformation(discretize(unique(hamboottest)))
+test.383[,20]
+test.384[,20]
+mutinformation(discretize(test.383), discretize(test.384))
+
+mutin3 <- replicate(100, {
+  hamboot <- rbind(unique(hammy[sample(nrow(hammy[hammy$pres==1,]), 88, replace=T),]), unique(hammy[sample(nrow(hammy[hammy$pres==0,]), 176, replace=T),]))
+  mutin <- rep(NA, 19)
+  for(i in 1:19){
+    mutin[i] <- mutinformation(cbind(discretize(hamboot[,1]), discretize(hamboot[,12]), discretize(hamboot[,i])), discretize(hamboot[,20]))
+  }
+  j <- 0
+  j <- j + 1
+  mutin3[j,] <- mutin
+})
+
+
+medianCI <- function(data){
+  medci <- cbind(median(data), 
+        quantile(data, 0.025),
+        quantile(data, 0.975))
+  colnames(medci) <- c("median", "low", "upp")
+  return(medci)
+}
+
+mutin3CI2 <- apply(mutin3, 1, medianCI)
+mutin3CI2
+mutin3CI
+rank(mutin3CI[1,])
+rank(mutin3CI2[1,])
+mutin3med <- apply(mutin3, 2, median)
+mutin3med
+
 mutin3 # in this example, bio12 adds the most information. Notice bio1 and bio2, which are already included as variables, do not increase the information if added a second time because that information is already there, and the algorithm is smart enough to realize.
 # then we would move on to 4 variables, 5 variables, etc etc...
 # So if you want to make this rigorous, can bootstrap (maybe without replacement because of the spatial autocorrelation stuff...) the mutual information by running 1000 permutations with random subsets of the localities.
 
 # I think the biggest challenge here will be the pseudoabsence selection. Will have to select outside Spea's range to better reflect them as true absences. So do like, 500 random background points on California and surrounding, and then mask out anything in close proximity to true presences.  
 
+# After using mutinformation to select variables, can test against step() with lm and glm? and other methods? And then run an actual maxent run and compare the results/compare to a full run with 19 variables???  
+
 ```
+
+Other things I could bootstrap: the actual occurrence points. Wait, didn't I already say I would do that? Yes... but Maxent itself can do that... so idk
+
+For absence points I'm going to randomly sample ~ 250 points from the background raster, and then clip out anything that falls within a ~10 km radius of presence points... is this biasing it? idk. Maybe use an even smaller radius... so I won't show the full procedure for that here, and will just import the csv file I make from it.
