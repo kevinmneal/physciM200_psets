@@ -1,13 +1,18 @@
 ---
-title: "Variable selection for species distribution modeling: an example with the western spadefoot toad"
+title: 'Variable selection for species distribution modeling: an example with the
+  western spadefoot toad'
 author: "Kevin Neal"
 date: "June 12, 2015"
-output: 
+output:
   html_document:
-    fig_caption: yes
+    fig_height: 7
     fig_width: 10
-    fig_height: 8
-    
+    toc: yes
+  pdf_document:
+    fig_height: 6
+    fig_width: 10
+    highlight: tango
+    toc: yes
 ---
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(warning=FALSE, message=FALSE)
@@ -27,14 +32,82 @@ load("C:/Users/Kevin/Google Drive/UCLA Courses or Lab meetings etc/PhysciM200/ph
 par(mfrow=c(1,1))
 ```
 
-## INTRODUCTION  
+# Introduction  
 
-## Spadefoot toad  
-- _Spea hammondii_ - western spadefoot toad  
+
 ![Spea hammondii](http://i.imgur.com/PsRfF6F.jpg?1)
+
+Species distribution modeling (SDM), or sometimes "ecological niche modeling," (ENM), is a tool for predicting species distributions and for determining environmental or other correlates of a species' presence in a given location. These models use a combination of spatial environmental layers, where each pixel has a value of some environmental parameter, and species occurrence points for its predictions. A popular program for conducting these is Maxent (Phillips et al. 2006; Phillips and Dudík 2008), which models species occupancy probabilities on a landscape using maximum entropy.  
+
+As explained by Elith and colleagues (2011), Maxent uses environmental covariate data from known presence/occurrence points and from a random sampling of background points across a landscape ("pseudoabsences") to estimate the ratio of the covariate distribution at presence sites f1(z) to the covariate distribution of the background f(z), choosing f1(z) among possible distributions by minimizing the distance to f(z) (minimizing this distance can be thought of as minimizing the distance to a null model without any known occurrence data). The distance between the covariate distribution of the presence points and the background is the Kullback-Leibler divergence, i.e. the relative entropy of f1(z). The name for Maxent (the program) derives from the program’s maximizing the entropy of the "raw" geographic distribution of occupancy probabilities, which is equivalent to minimizing the relative entropy of the environmental covariate distribution f1(z) relative to f(z) (Phillips et al. 2006; Elith et al. 2011). 
+
+To most ecologists, these details of the Maxent "black box" are an afterthought. Indeed, that had been my situation. I began using Maxent with a tangible goal of using species distribution modeling to predict past, present, and future distributions of the western spadefoot toad, Spea hammondii.  The initial motivation for doing SDM's with Spea hammondii at all involved a peculiar discordance between evolutionary trees of the genus Spea generated from different genes. There are four *Spea* species: *hammondii*, *multiplicata*, *intermontana*, and *bombifrons*; all are found only in western North America; *hammondii* has no current range overlap with the others, while the other three do have some overlap throughout their respective ranges. In a phylogeny generated from eight nuclear genes, one sees a pattern of *S. hammondii* (SHAM hereafter) as the outgroup to the remaining three. However, using a mitochondrial DNA phylogeny, all SHAM individuals in the southern portion of their range come out as the sister group to *S. multiplicata* (SMULT hereafter). One hypothesis for why this may be is mitochondrial introgression from SMULT into only the southern population of SHAM, with the introgression failing to make its way north of the Tehachapi Mountains in central California. The problem with this hypothesis of introgression is that it requires there to have been interbreeding between SHAM and SMULT, when they are currently completely separated by the Mojave Desert (and no individuals of any *Spea* species are known from the Mojave). If introgression truly occurred, then, it must have taken place under different climatic circumstances under which the ranges overlapped. With the availability of global climate models from different points in the recent geologic past, to test the hypothesis I decided to use SDMs to predict the ranges of both species at representative climatic slices: a period of peak glaciation (Last Glacial Maximum, ~21ka), minimum glaciation (Last Interglacial, ~120ka), and an intermediate stage of glaciation (mid-Holocene, ~6ka). If distribution models under these different climatic scenarios showed expansions that led to the overlap of the two species, although it would not prove interbreeding, it would suggest that mitochondrial introgression could remain a viable hypothesis for the observed phylogenetic patterns.  
+
+In the literature where Maxent has been applied to real species, many if not most of the 4000+ publications use what have become the standard environmental covariates for modeling species distributions, known as "bioclim" layers (Beaumont et al. 2005; Booth et al. 2014). Bioclim layers are nineteen environmental variables generated from worldwide temperature and precipitation records presumed to be biologically relevant (that is, some combination of these variables determines, or helps to determine, the bounds of species range limits). These Bioclim layers are easily accessible and widely used, and the precedent of simply throwing all nineteen into the Maxent black box perpetuates the same; this in spite of the fact that many of the variables are often highly correlated with one another. Maxent has been described as robust to this sort of overparameterization through its inbuilt method for regularization, with Elith et al. (2011) noting Maxent "is unlikely to be improved – and more likely, degraded – by procedures that use other modelling methods to pre-select variables." Even if this is the case [and my personal dealings with it actually show this to be accurate], variable selection is likely to be important when the Maxent model is used to make predictions in different regions or climates that have novel combinations of variable values outside the bounds of the input environmental parameter space. Because in my research I am using Maxent to predict occurrences in past and future climate scenarios, variable selection ought to be important for creating a more generalizable model (to say nothing of compliance with philosophical parsimony). 
+
+For this project I explored variable selection for species distribution modeling of *Spea hammondii* using both stepwise regression and mutual information. For project manageability/as a first-run dive into understanding the applications of regression and information theoretic statistics to variable selection for an SDM outside of a black box, I used generalized linear modeling (GLM) in R, rather than Maxent, to predict species occurrence probability across the landscape. I additionally used bootstrapping to examine variability in the models, and compared models using the area under the receiver operating characteristic curve (AUC).  
+
+## Materials and Methods  
+
+To obtain presence records of SHAM, I downloaded raw occurrence data from the Global Biodiversity Information Facility (GBIF). I then cleaned up this data (raw data has 200+ columns to avoid any information loss from the different field notes of researchers) to get just Longitude and Latitude. I went through a number of clean-up steps in R for quality control to remove spatially-aberrant points or entries with missing data. To avoid biasing the models’ determination of habitat suitability from the presence points, I split the study area into grid cells and subsampled a single occurrence point from each grid; this substantially reduced the number of occurrence entries (794 to 88) but is a necessary step to control for biased spatial sampling (F. Dormann et al. 2007; VanDerWal et al. 2009; Stokland et al. 2011; Barbet-Massin et al. 2012; Syfert et al. 2013; Warren et al. 2014).  
+
+I generated pseudoabsence points first by randomly sampling 1000 points from the region within 300 km of any given presence point, excluding an area of 10km around any given presence point. I then followed the same grid-sampling procedure as with the presence points to limit spatial autocorrelation. While there are arguments for both a large and small amount of pseudoabsences in SDM (VanDerWal et al. 2009), to limit computation times in later analyses I arbitrarily subsampled this down to double the number of presence points, at 176 pseudoabsences. 
+
+Using the coordinates of the presence and pseudoabsence points I then extracted values from the nineteen bioclim layers into a dataframe. For the response variable I assigned a value of "1" to presence points and "0" to pseudoabsences. 
+
+To get a sense of the correlations among the nineteen bioclim variables, in R I calculated Spearman correlation using the cor function in the corrplot package (Wei 2013), and I calculated the maximal information criteria (MIC) using the mine function in the minerva package (Filosi et al. 2014). I plotted these correlations using the corrplot function in corrplot. 
+
+I utilized mutual information (mutinformation function in package infotheo (Meyer 2014)) as suggested in Ivannikova et al (2013) to select predictors by iteratively adding predictors to the function (can think of it in a way as a forward stepwise regression, but using mutual information). The strategy is to maximize the information with the least amount of variables, with X as the predictor variables (bioclim) and Y as the response variable (i.e. presence/absence). I began the process with running mutinformation() on the whole dataframe to see which single predictor variable had the highest mutual information value with the response variable; this became the first variable selected for the model. Subsequently, I looked for the greatest information addition adding a single other predictor, one at a time, among the remaining predictors. This method precludes highly correlated variables, because the addition of a new predictor that is highly correlated with one already included will offer little to no new information, even if it is itself highly correlated with the response variable on its own—and thus the method iteratively adds variables that offer new information to the model until the information plateaus.  
+
+As a comparison, I utilized the built-in step function to implement a backwards stepwise GLM regression of the bioclim variables and presence/absence to determine the optimal combination of variables, as determined by the lowest Akaike Information Criterion (AIC) value. The stepwise regression works by calculating the AIC of models in which variables are iteratively removed, until the lowest possible AIC is achieved.  
+
+I generated three GLM’s, modeled using a binomial distribution to conduct logistic regression, as appropriate for a binary response variable. The models are: a "full" model using all nineteen bioclim variables; the "step" model using those variables producing the lowest AIC in the stepwise regression; and the third being the "MI" model using those variables determined as optimal using mutual information. I then wrote two bootstrapping functions to look at sampling effects and to generate null prediction maps. These functions bootstrap resample from the presence points and the absence points separately (so each iteration keeps the same number of presence and absence points): the standard bootstrap function resamples whole rows so a given point has the same environmental values, while the null bootstrap function shuffles data within columns, eliminating any correlations. Within the functions, the model put into the function is re-run with the resampled datapoints, and the output of the functions is the map of the median probability of all bootstrapped predictions, accomplished with the predict function in dismo (Hijmans et al. 2015). These maps, along with the prediction maps generated from the original GLM’s, allow for easy spatial visualization of probabilities of occurrence, given the model. Finally I used the evaluate function in dismo to calculate the area under the receiver operator curve (AUC). The area under these curves is assumed to be a measure of model performance, with higher AUC indicating a better model. 
+
+## Results and discussion  
+
+### Correlation and variable selection  
+
+Both Spearman correlation and maximal information criteria reveal strong correlations between several variable pairs within the nineteen bioclim variables, validating the concern over collinearity and model overfitting in a species distribution model of Spea hammondii in the sampled environmental space.   
+
+Using mutual information to guide variable selection, bio1 (annual mean temperature) is the first best predictor of presence or absence. The forward-stepping method settles on a GLM of presence ~ bio1 + bio2 + bio4 + bio12 + bio15 + bio16 + bio17 + bio18, with the mutual information between the predictors and response equal to 0.631. Among these variable pairs, bio1+bio17 and bio12+bio16 still appear to be highly correlated (MIC=0.710 and 0.918, respectively). Additional variables did not increase the information, and testing MI between presence and all nineteen variables also returns MI = 0.631, indicating the eight chosen variables contain as much information as all nineteen. This method of variable selection may be imperfect, however, as it fails to consider interactions between variables (which may be accomplished with conditional mutual information (Fleuret 2004), but its application is beyond the scope here). The AIC of the MI-informed GLM is 216.44.   
+
+The GLM model with the lowest AIC according to backwards stepwise regression is presence ~ bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19, with AIC = 191.45. Among these variable pairs, bio1+bio17 and bio14+bio17 still appear to be highly correlated (MIC=0.710 and 0.790, respectively).  
+
+The AIC of the GLM with all nineteen variables is 207.25.  
+
+### Model predictions  
+
+The ecology literature considers a model with AUC > 0.8 to be a "good" model (Phillips and Dudík 2008; Elith et al. 2011): all three models (full, step, MI) exceed this and can be considered "good."  All prediction maps stumble in areas where there were no samples (presence or absence) taken (see e.g. lower right in all maps), demonstrating the pitfalls of predicting into areas of novel environments. Median bootstrapped prediction maps do not differ substantially from their unbootstrapped counterparts, although they produce more conservative predictions, with the predicted probabilities of occurrence outside the sampling range notably reduced. The MAD maps (not shown, but were evaluated) also reveal areas that appear to be sensitive to sampling in the model by indicating particularly high levels of deviation from the median. In practice it is not clear to me that bootstrapping the samples and re-running the model is the best method, as it will introduce spatial autocorrelation, but permuting with an arbitrary subsample does not seem ideal either. This is likely a case where cross-validation would be the appropriate way to test the robustness of the model (Hijmans 2012), and I will explore this in future pursuits.  
+
+Qualitatively, if we ignore the overreaching predictions into novel environments, all three GLM models do an adequate job of reconstructing the understood range of *Spea hammondii*, and quantitatively the AUC scores agree. Ranking the models in terms of AUC score, the GLM from the stepwise regression is the best (AUC=0.927), followed by the full model (AUC=0.923), and with the MI-informed GLM in last (AUC=0.902). This outcome on the surface may make one hesitant to dive deeper into applying information theoretic methods to species distribution modeling, but Maxent’s success as an information theoretic model already makes it clear that these methods are truly capable. My use of mutual information in this project was merely in selecting variables for an optimal model, and not used in the predictions or evaluation of the model itself. So while this exercise of variable selection using generalized linear models has been extremely useful in expanding my familiarity with regression and prediction, the next step will be examining these reduced-predictor datasets in Maxent itself and evaluating their utility to my continued research in amphibian ecology and conservation.  
+
+## References  
+
+Barbet-Massin, M., F. Jiguet, C. H. Albert, and W. Thuiller. 2012. Selecting pseudo-absences for species distribution models: how, where and how many? Methods Ecol. Evol. 3:327–338.  
+Beaumont, L. J., L. Hughes, and M. Poulsen. 2005. Predicting species distributions: use of climatic parameters in BIOCLIM and its impact on predictions of species’ current and future distributions. Ecol. Model. 186:251–270.  
+Booth, T. H., H. A. Nix, J. R. Busby, and M. F. Hutchinson. 2014. bioclim: the first species distribution modelling package, its early applications and relevance to most current MaxEnt studies. Divers. Distrib. 20:1–9.  
+Elith, J., S. J. Phillips, T. Hastie, M. Dudík, Y. E. Chee, and C. J. Yates. 2011. A statistical explanation of MaxEnt for ecologists. Divers. Distrib. 17:43–57.  
+F. Dormann, C., J. M. McPherson, M. B. Araújo, R. Bivand, J. Bolliger, G. Carl, R. G. Davies, A. Hirzel, W. Jetz, W. Daniel Kissling, I. Kühn, R. Ohlemüller, P. R. Peres-Neto, B. Reineking, B. Schröder, F. M. Schurr, and R. Wilson. 2007. Methods to account for spatial autocorrelation in the analysis of species distributional data: a review. Ecography 30:609–628.  
+Filosi, M., R. Visintainer, D. Albanese, S. Riccadonna, G. Jurman, and C. Furlanello. 2014. minerva: minerva: Maximal Information-Based Nonparametric Exploration R package for Variable Analysis.  
+Fleuret, F. 2004. Fast Binary Feature Selection with Conditional Mutual Information. J Mach Learn Res 5:1531–1555.  
+Hijmans, R. J. 2012. Cross-validation of species distribution models: removing spatial sorting bias and calibration with a null model. Ecology 93:679–688.  
+Hijmans, R. J., S. Phillips, and J. L. and J. Elith. 2015. dismo: Species Distribution Modeling.  
+Ivannikova, E., T. Hamalainen, and K. Luostarinen. 2013. Information-theoretic approach to variable selection in predictive models applied to paper machine data. Pp. 000946–000950 in 2013 IEEE Symposium on Computers and Communications (ISCC).  
+Meyer, P. E. 2014. infotheo: Information-Theoretic Measures.  
+Phillips, S. J., R. P. Anderson, and R. E. Schapire. 2006. Maximum entropy modeling of species geographic distributions. Ecol. Model. 190:231–259.  
+Phillips, S. J., and M. Dudík. 2008. Modeling of species distributions with Maxent: new extensions and a comprehensive evaluation. Ecography 31:161–175.  
+Stokland, J. N., R. Halvorsen, and B. Støa. 2011. Species distribution modelling—Effect of design and sample size of pseudo-absence observations. Ecol. Model. 222:1800–1809.  
+Syfert, M. M., M. J. Smith, and D. A. Coomes. 2013. The Effects of Sampling Bias and Model Complexity on the Predictive Performance of MaxEnt Species Distribution Models. PLoS ONE 8:e55158.  
+VanDerWal, J., L. P. Shoo, C. Graham, and S. E. Williams. 2009. Selecting pseudo-absence data for presence-only distribution modeling: How far should you stray from what you know? Ecol. Model. 220:589–594.  
+Warren, D. L., A. N. Wright, S. N. Seifert, and H. B. Shaffer. 2014. Incorporating model complexity and spatial sampling bias into ecological niche models of climate change risks faced by 90 California vertebrate species of concern. Divers. Distrib. 20:334–343.  
+Wei, T. 2013. corrplot: Visualization of a correlation matrix.  
+
 
 
 ***
+***
+***
+# SUPPLEMENT: R-scripts and figures  
 
 ## Loading the spadefoot toad presence and absence point data:  
 
@@ -285,7 +358,6 @@ rank(mutin9) # no additional information... so the current model should be the b
 
 
 
-
 ```{r code for generating the random background points as test points or nevermind just use the raster prediction, eval=F, include=F}
 circ <- circles(hammy.ll, d=300000, lonlat=TRUE) #creates circles of 100km radius around presence points; will draw pseudoabsences from these buffers
 discirc <- gUnaryUnion(circ@polygons) #dissolve circle features into one feature
@@ -350,6 +422,12 @@ summary(hammy.glm.step)
 hammy.glm.mi <- glm(pres ~ bio1 + bio12 + bio2 + bio17 + bio4 + bio15 + bio16 + bio18, family=binomial(link = "logit"), data=hammy)
 summary(hammy.glm.mi)
 
+# are there still highly correlated variables in the two reduced models? Yes!
+# mine(hammy[,c(1,2,4,12,15,16,17,18)])$MIC # yes: bio1+bio17 (MIC=0.710); bio12+bio16 (MIC=0.918). Try the MI model without bio16
+# mine(hammy[,c(1,4,9,14,15,17,18,19)])$MIC # yes: bio1+bio17 again; bio14+bio17 (MIC=0.790). Try the step model without bio17
+
+# summary(glm(pres ~ bio1 + bio4 + bio9 + bio14 + bio15 + bio18 + bio19, family=binomial(link = "logit"), data=hammy)) # AIC=194.2, so it performs worse than the model that includes bio17
+# summary(glm(pres ~ bio1 + bio12 + bio2 + bio17 + bio4 + bio15 + bio18, family=binomial(link = "logit"), data=hammy)) # AIC=214.78. Better! (compare to 216.44)
 
 ```
 
@@ -436,25 +514,25 @@ hammyPredict.mi.nh <- bootPredict.nh(bclimRaster.mi, hammy.glm.mi, reps=100)
 
 ```{r plotting full GLM model, echo=F}
 par(mfrow=c(1,2))
-plot(hammyPredict.full, col=heat.colors(50), main="probs, 19var GLM")
+plot(hammyPredict.full, main="probs, 19var GLM")
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
-plot(hammyPredict.full.boot[[1]], col=heat.colors(50), main="bootmedian, 19var GLM") # explain how you bootstrapped
+plot(hammyPredict.full.boot[[1]], main="bootmedian, 19var GLM") # explain how you bootstrapped
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
-# plot(hammyPredict.full.boot[[2]], col=heat.colors(50), main="bootMAD, 19var GLM") 
+# plot(hammyPredict.full.boot[[2]], main="bootMAD, 19var GLM") 
 # points(spea.llonly, pch="+")
 # points(absent.llonly, pch="-")
 # legend("topright", legend=c("+  pres", "-  abs"))
 
 par(mfrow=c(1,2))
-plot(hammyPredict.mi.boot[[1]], col=heat.colors(50), main="bootmedian, 19var GLM") 
+plot(hammyPredict.mi.boot[[1]], main="bootmedian, 19var GLM") 
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
-plot(hammyPredict.full.nh[[1]], col=heat.colors(50), main="bootmedian, 19var GLM, null") 
+plot(hammyPredict.full.nh[[1]], main="bootmedian, 19var GLM, null") 
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
@@ -466,25 +544,25 @@ legend("topright", legend=c("+  pres", "-  abs"))
 
 ```{r plotting step GLM model, echo=F }
 par(mfrow=c(1,2))
-plot(hammyPredict.glm.step, col=heat.colors(50), main="probs, step GLM")
+plot(hammyPredict.glm.step, main="probs, step GLM")
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
-plot(hammyPredict.glm.step.boot[[1]], col=heat.colors(50), main="bootmedian, step GLM") # explain how you bootstrapped
+plot(hammyPredict.glm.step.boot[[1]], main="bootmedian, step GLM") # explain how you bootstrapped
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
-# plot(hammyPredict.glm.step.boot[[2]], col=heat.colors(50), main="bootMAD, step GLM") 
+# plot(hammyPredict.glm.step.boot[[2]], main="bootMAD, step GLM") 
 # points(spea.llonly, pch="+")
 # points(absent.llonly, pch="-")
 # legend("topright", legend=c("+  pres", "-  abs"))
 
 par(mfrow=c(1,2))
-plot(hammyPredict.mi.boot[[1]], col=heat.colors(50), main="bootmedian, MI best GLM") 
+plot(hammyPredict.mi.boot[[1]], main="bootmedian, MI best GLM") 
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
-plot(hammyPredict.mi.nh[[1]], col=heat.colors(50), main="bootmedian, MI best GLM, null") 
+plot(hammyPredict.mi.nh[[1]], main="bootmedian, MI best GLM, null") 
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
@@ -496,29 +574,29 @@ legend("topright", legend=c("+  pres", "-  abs"))
 
 ```{r plotting MI GLM model, echo=F }
 par(mfrow=c(1,2))
-plot(hammyPredict.mi, col=heat.colors(50), main="probs, MI best GLM")
+plot(hammyPredict.mi, main="probs, MI best GLM")
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
-plot(hammyPredict.mi.boot[[1]], col=heat.colors(50), main="bootmedian, MI best GLM") 
+plot(hammyPredict.mi.boot[[1]], main="bootmedian, MI best GLM") 
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
-# plot(hammyPredict.mi.boot[[2]], col=heat.colors(50), main="bootMAD, MI best GLM") 
+# plot(hammyPredict.mi.boot[[2]], main="bootMAD, MI best GLM") 
 # points(spea.llonly, pch="+")
 # points(absent.llonly, pch="-")
 # legend("topright", legend=c("+  pres", "-  abs"))
 
 par(mfrow=c(1,2))
-plot(hammyPredict.mi.boot[[1]], col=heat.colors(50), main="bootmedian, MI best GLM") 
+plot(hammyPredict.mi.boot[[1]], main="bootmedian, MI best GLM") 
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
-plot(hammyPredict.mi.nh[[1]], col=heat.colors(50), main="bootmedian, MI best GLM, null") 
+plot(hammyPredict.mi.nh[[1]], main="bootmedian, MI best GLM, null") 
 points(spea.llonly, pch="+")
 points(absent.llonly, pch="-")
 legend("topright", legend=c("+  pres", "-  abs"))
-#plot(hammyPredict.mi.nh[[2]], col=heat.colors(50), main="bootMAD, MI best GLM, null") 
+#plot(hammyPredict.mi.nh[[2]], main="bootMAD, MI best GLM, null") 
 #points(spea.llonly, pch="+")
 #points(absent.llonly, pch="-")
 #legend("topright", legend=c("+  pres", "-  abs"))
