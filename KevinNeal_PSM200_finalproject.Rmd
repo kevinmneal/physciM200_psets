@@ -150,22 +150,9 @@ hammy.ll <- cbind(hammy, rbind(spea.ll[,c(1:2)], absent.ll[,c(1:2)])) # the data
 
 ### Stepwise regression
 ```{r using GLM}
-#options(show.signif.stars = T) # cuz why not
-#names(spea)
-#model1 <- lm(bio6 ~ bio1 + bio2 + bio3 + bio4 + bio5, data=spea)
-#summary(model1) # murder and population significant; area and illiteracy worst predictors. Tutorial removes area...
-#mine(spea)
 
 # With GLM: specify binomial family
 
-family <- binomial(link = "logit")
-
-
-# GLM with presence-only:
-#spea.glm <- glm(pres ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, family=binomial(link = "logit"), data=spea2)
-#summary(spea.glm)
-#step(spea.glm, direction="backward") # this fails without absence points. Kind of expected...  
-# step() on presence-only gives best-fit as: pres ~ bio1 + bio2 + bio3 + bio4 + bio5 + bio6 + bio8 + bio9 + bio11 + bio12 + bio14 + bio15 + bio16 + bio18
 
 # GLM with presence and absence:
 hammy.glm <- glm(pres ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, family=binomial(link = "logit"), data=hammy)
@@ -185,317 +172,40 @@ plot(pres~bio8+bio9, data=hammy)
 
 
 
+```{r corrplot, eval=F}
 
-
-
-
-### Bootstrapping
-```{r bootstrapping, eval=F}
-### For this with Spea and presence/"absence" data, could shuffle ONLY the presence/absence column ... which is the NHST below I guess
-
-
-# bootstrap spearman correlations using replicate()
-draws <- replicate(1000, {
-  i <- sample(nrow(spea), replace=TRUE)
-  data <- spea[i,]
-  cor(data, method="spearman")
-})
-
-#str(draws) 
-#colnames(draws)
-#rownames(draws)
-#draws[,,2]
-#median(draws[2,3,])
-#colnames(draws)[2]
-
-actual.cor <- cor(spea)
-par(mfrow=c(19,19))
-#par("mar") # checks current margin dimensions
-par(mar=c(1.5,1,1,1), cex.main=0.8, cex.axis=0.8, cex.lab=0.8, mgp=c(1,0,0))
-# using mfcol plots down instead of across
-# reset with layout(matrix(1))
-
-for(i in 1:19){
-  for(j in 1:19){
-    if(i==j){
-      plot.new()
-    } else {
-    hist(draws[i,j,], main=paste(colnames(draws)[i], "~", colnames(draws)[j]), xlab="")
-    abline(v = quantile(draws[i,j,], c(0.025, 0.975)), col="blue") # blue lines for 95CI
-    abline(v = actual.cor[i,j], col="red") # red line for actual median
-    print(paste(colnames(draws)[i], "~", colnames(draws)[j], ": ", round(median(draws[i,j,]), digits=4), " (", round(sort(draws[i,j,])[0.025*1000], digits=4), ", ", round(sort(draws[i,j,])[0.975*1000], digits=4), ")", sep=""))
-    }
-    
-  }
-}
-
-```
-
-Red lines are observed Spearman correlation coefficients. Blue lines are 95% confidence intervals based on 10,000 bootstraps.
-
-### Null Hypothesis Significance Testing
-```{r NHST, eval=F}
-#cor(spea)
-
-draws.nh <- replicate(1000, {
-  data <- apply(spea, 2, sample) # shuffles data within columns for doing NHST
-  cor(data, method="spearman")
-})
-
-# prints one-sided p-value, using absolute value to account for negative correlations
-speabc.pvals <- data.frame(matrix(NA, nrow=19, ncol=19))
-row.names(speabc.pvals) <- (colnames(draws.nh))
-#str(sep.pvals)
-#sep.pvals[] <- NA
-par(mfrow=c(19,19))
-#par("mar") # checks current margin dimensions
-par(mar=c(1.5,1,1,1), cex.main=0.8, cex.axis=0.8, cex.lab=0.8, mgp=c(1,0,0))
-
-for(i in 1:19){
-  for(j in 1:19){
-    if(i==j){
-      plot.new()
-    } else {
-    hist(draws.nh[i,j,], main=paste(colnames(draws.nh)[i], "~", colnames(draws.nh)[j]), xlab="")
-    abline(v = quantile(draws.nh[i,j,], c(0.025, 0.975)), col="blue") # blue lines for 95CI
-    abline(v = actual.cor[i,j], col="red") # red line for actual median
-    speabc.pvals[i,j] <- length(draws.nh[i,j,draws.nh[i,j,]>abs(actual.cor[i,j])])/1000
-    #print(paste(colnames(draws.nh)[i], ", ", colnames(draws.nh)[j], (length(draws.nh[i,j,draws.nh[i,j,]>abs(actual.cor[i,j])])/10000)))
-    
-    }
-  }
-}
-par(mfrow=c(1,1))
-colnames(speabc.pvals) <- colnames(draws.nh)
-rownames(speabc.pvals) <- colnames(draws.nh)
-
-
-```
-Null hypothesis significance testing (null: Spearman correlation is zero). Red lines are observed Spearman correlation coefficients. Blue lines are 95% confidence intervals based on 1000 bootstraps.  
-
-
-```{r}
-
-hist(spea2[,1], col="red")
-par(mfrow=c(1,2))
-hist(absent2[,1], col="blue")
-
-
-```
-
-```{r MIC}
-# MIC tablecolumns:
-# MIC >= x,gives p <= y,+/- (with 95% confidence)
-
-# all original predictors
-#sepMIC <- mine(sep)$MIC
-#micpval <- read.csv("n=35,alpha=0.6.csv", header=T, na.strings = c('n','0','bad','?','NA','---','-', ' ')) # downloaded p-values for n=35
-#par(mfrow=c(1,2))
-#corrplot(mine(sep)$MIC, main="sepsis MIC")
-#corrplot(cor(sep, method="spearman", use="pairwise.complete.obs"), main="spearman")
-
-#par(mfrow=c(1,1))
-
-# 4 significant predictors
-spea.bioclimMIC <- mine(hammy)$MIC
-micpval <- read.csv("n=55,alpha=0.6.csv", header=T, na.strings = c('n','0','bad','?','NA','---','-', ' ')) # downloaded p-values for n=35
-par(mfrow=c(1,2))
-corrplot(mine(hammy)$MIC, main="spea MIC")
-corrplot(cor(hammy, method="spearman", use="pairwise.complete.obs"), main="spearman")
-
-
-micpval[(micpval$MIC<(spea.bioclimMIC[2,1]+0.00001) & micpval$MIC>(spea.bioclimMIC[2,1]-0.00001)),]
-# min(micpval$MIC) # MIC values in table range from 0.4328 to 0.9207. Anything above 0.9207 has pval = 0 more or less; MIC less than 0.4238 is > 0.05
-mic.pvals <- data.frame(matrix(NA, nrow=19, ncol=19))
-
-#str(mic.pvals)
-
-for(i in 1:19){
-  for(j in 1:19){ 
-    mic.pvals[i,j] <- micpval[which.min(abs(micpval$MIC - spea.bioclimMIC[i,j])),][2]
-  }
-}
-    
-colnames(mic.pvals) <- colnames(spea)
-rownames(mic.pvals) <- colnames(spea)
-
-mic.pvals2 <- mic.pvals
-#mic.pvals2[mic.pvals2>0.05] <- "NS"
-#mic.pvals
-spea.bioclimMIC.high <- spea.bioclimMIC
-#spea.bioclimMIC.high[spea.bioclimMIC.high>=0.7] <- "HIGH"
-
-#write.csv(mic.pvals, file="speaBioclim_MICpvals.csv")
-```
-
-
-
-
-Add the p-value matrix with the MIC value matrix... find cells that are high and significant:
-
-```{r}
-
-sp.MIC.high2 <- spea.bioclimMIC.high
-sp.MIC.high2[sp.MIC.high2>=0.9] <- 800.0 # any high values now equal 800 to make addition with p-value matrix more obvious... and making significant p-values equal 200. So any high and significant cells will equal 1000 when added. Probably a much easier way to do this but whatever
-
-mic.pvals.toadd <- mic.pvals
-mic.pvals.toadd[mic.pvals.toadd<0.005] <- 200.0
-
-sp.MIC.highandsig <- sp.MIC.high2 + mic.pvals.toadd
-
-
-#as.matrix(sp.MIC.high2) + as.matrix(sp.MIC.high2)
-
-#sp.MIC.highandsig <- apply(sp.MIC.high2, 2, FUN=as.numeric) + apply(mic.pvals.toadd, 2, FUN=as.numeric) use when non-numeric
-sp.MIC.highandsig.df <- as.data.frame(sp.MIC.highandsig)
-
-```
-
-
-```{r, eval=F}
-Significant MIC correlations (>0.7, arbitrarily...) with p < 0.005 (arbitrary cutoff... but I can't take everything out...):
-
-bio3-bio4
-bio3-bio7
-bio3-bio9
-bio3-bio10
-bio4-bio5
-bio4-bio7
-bio4-bio9
-bio4-bio10
-bio5-bio9
-bio5-bio10
-bio6-bio8
-bio6-bio10
-bio6-bio11
-bio7-bio9
-bio8-bio11
-bio9-bio10
-bio12-bio13
-bio12-bio16
-bio12-bio19
-bio13-bio16
-bio13-bio19
-bio16-bio19
-
-Significant MIC correlations (>0.9, arbitrarily...) with p < 0.005 (arbitrary cutoff... but I can't take everything out...):
-
-bio3-bio4
-bio4-bio7
-bio5-bio7
-bio9-bio10
-bio12-bio13
-bio12-bio16
-bio12-bio19
-bio13-bio16
-bio13-bio19
-bio16-bio19
-
-number of pairs each biolayer is present in:
-bio3: 1
-bio4: 2
-bio5: 1
-bio7: 2
-bio9: 1
-bio10: 1
-bio12: 4
-bio13: 4
-bio16: 3
-bio19: 3
-```
-
-Sum columns - those with MOST mutual information should be removed? Maybe?
-
-```{r}
-
-
-
-#sum(spea.bioclimMIC[,12])
-#sum(spea.bioclimMIC[,13]) # so 12 has more total mutual info than 13... 
-#sum(spea.bioclimMIC[,1])
-
-speaMICsum <- rep(NA, 19)
-for(i in 1:19){
-  speaMICsum[i] <- sum(spea.bioclimMIC[,i])
-}
-speaMICsum # is this informative though? here, bio4 has the most mutual information... should it be removed, then? does bio14 have the most unique information because it has the lowest total MIC?
-
-```
-
-```{r, echo=F, eval=F, include=F}
-
-
-
-Should I use "presence" as the dependent variable? Do I just score it as 0 = absent and 1 = present and include some pseudoabsence points?
-I could use Maxent values of probability, but that would be circular as fuck. Maybe a priori downweight pseudoabsence points by distance from a presence point so that they aren't all equal to zero...?  
-
-
-Try this out with just presences... so add a column to the original input with just 1's
-```
-
-```{r}
-spea2 <- spea
-
-present <- rep(0:1, 27)
-spea2[,20] <- present
-colnames(spea2)[20] <- "present"
+corrplotMIC <- corrplot(mine(hammy)$MIC, main="MIC")
+corrplotSpear <- corrplot(cor(hammy, method="spearman", use="pairwise.complete.obs"), main="spearman")
 
 par(mfrow=c(1,2))
-corrplot(mine(spea2)$MIC, main="spea MIC")
-corrplot(cor(spea2, method="spearman", use="pairwise.complete.obs"), main="spearman")
-
-
-# BIO1 = Annual Mean Temperature
-# BIO2 = Mean Diurnal Range (Mean of monthly (max temp - min temp))
-# BIO3 = Isothermality (BIO2/BIO7) (* 100)
-# BIO4 = Temperature Seasonality (standard deviation *100)
-# BIO5 = Max Temperature of Warmest Month
-# BIO6 = Min Temperature of Coldest Month
-# BIO7 = Temperature Annual Range (BIO5-BIO6)
-# BIO8 = Mean Temperature of Wettest Quarter
-# BIO9 = Mean Temperature of Driest Quarter
-# BIO10 = Mean Temperature of Warmest Quarter
-# BIO11 = Mean Temperature of Coldest Quarter
-# BIO12 = Annual Precipitation
-# BIO13 = Precipitation of Wettest Month
-# BIO14 = Precipitation of Driest Month
-# BIO15 = Precipitation Seasonality (Coefficient of Variation)
-# BIO16 = Precipitation of Wettest Quarter
-# BIO17 = Precipitation of Driest Quarter
-# BIO18 = Precipitation of Warmest Quarter
-# BIO19 = Precipitation of Coldest Quarter
-
-## 12, 13, 16, 19 highly correlated! Because almost all of CA's precipitation falls in the wettest month/quarter, which also tends to be the coldest month/quarter
-
-?minerva
+corrplot(corrplotMIC)
+corrplot(corrplotSpear)
 ```
 
-## Things to explore further:  
-- using real binary data (1=present, 0=absent; I just randomly made some points absences here for testrun) and methods to deal this binary dependent variable (LASSO? dead/alive)  
-- variable selection with MIC  
-- other machine learning methods (random forests?)  
-- explore other "dimensionality reduction" methods?
-- Does removing correlated variables really affect predictions significantly?
-- Current predictions from MaxEnt already fairly reliable, but overparameterizing could have substantial effects for projections with novel climate scenarios (i.e. combinations of climate variable values not seen in present day) -- this is where the removal of collinear variables seems it would be most useful given the uncertainty of past and present climate models
+```{r corrplot figures}
+par(mfrow=c(1,2))
+corrplot(corrplotMIC)
+corrplot(corrplotSpear)
+```
 
-Things to remove: one of 3 and 4 (probably 4); one of 9 and 10 (probably 10); one of 8 and 11 (probably 11); two or three of 12, 13, 16, and 19 (probably 13 and 19). Then with what's left, maybe keep ONLY "Quarter" and remove its "Month" equivalent? Not 5 and 6 though...
 
 
 ### Latest update! June 9, 11pm
-Use this paper's method to use mutinformation to select the best model!: http://research.ics.aalto.fi/eiml/Publications/Publication136.pdf
+Use this paper's method to use mutinformation to select the best model!: http://research.ics.aalto.fi/eiml/Publications/Publication136.pdf (Ivannikova et al)
 
 by iteratively adding variables to the function. Goal is to maximize the information, with X as the variables and Y as the dependent variable (i.e. presence/absence). X is the bioclim variables. You start with running mutinformation() on the whole matrix and see which single variable has the highest mutual information value with the presence variable. This is your first variable selected. Subsequently, you will look for the greatest information addition adding a single other variable. To do this you will use cbind to put two variables in the X argument in mutinformation, and do this across all remaining variables to find the highest combination of information with your first selected variable. Like so:
 
 # But also check Tan and Jiang 2014: Model selection method based on maximal information coefficient of residuals (p. 590)
 
 
-```{r}
+```{r mutual information variable selection with forward steps}
 require(infotheo)
 
 hammy.mutinfo <- mutinformation(discretize(hammy)) # bio1 has highest mutual info
-corrplot(hammy.mutinfo/max(hammy.mutinfo))
+# corrplot(hammy.mutinfo/max(hammy.mutinfo)) # corrplot requires values between -1 and 1. I only did this to see how its patterns compare with using the mine() function in minerva
+corrplot(corrplotMIC)
 max(hammy.mutinfo)
-?mutinformation
+
 hammybc <- hammy[,-20]
 #mutinformation(discretize(hammybc), discretize(hammy[,20])) # MI = 0.631 including all variables
 
@@ -714,75 +424,12 @@ Barbet-Massin et al. 2012, Methods in Ecol and Evol. "Selecting pseudo-absences 
 
 # So: best to do permutations with mutual information???
 
-```{r multiinformation and conditional information}
-### IGNORE THIS STUFF PROBABLY
-
-# hammy.multinfo <- multiinformation(discretize(hammy))
-# hammy.multinfo
-# hammy.interinfo <- interinformation(discretize(hammy))
-# hammy.interinfo
-# 
-# # conditional information gives you the mutual information between X and Y, controlling for a variable S. I probably should have done this vs what I did above. So I'll do it here. Still start with bio1 because it had the most MI by itself with presence.
-# condin2 <- rep(NA, 19)
-# for (i in 1:19){
-#   condin2[i] <- condinformation(S=discretize(hammy[,i]), 
-#                                 Y=discretize(hammy[,20]), 
-#                                 X=discretize(hammy[,1]))
-# }
-# 
-# condin2 # controlling for bio1, bio12 comes out as the next most informative(?). Just like before!
-# 
-# # could pretty easily make a nested for-loop and do this for all 19 variables. But then go through the same steps above, just cbind-ing the variables you incorporated into the model for the S arg
-# 
-# 
-# condin3 <- rep(NA, 19)
-# for (i in 1:19){
-#   condin3[i] <- condinformation(S=discretize(hammy[,i]), 
-#                                 Y=discretize(hammy[,20]), 
-#                                 X=cbind(discretize(hammy[,1]),
-#                                         discretize(hammy[,12])))
-# }
-# 
-# condin3 # does this suggest bio2 is best? or bio19? I think you want the most negative one with the way I'm doing this. Because you're controlling for the variable i; if without it you lose information, then you should want to include it in the model! So test the mutinformation() after every one? Actually I don't think this works. See if you can find a more explicit conditional mutual information model selection package...
-# 
-# mutinformation(cbind(discretize(hammy[,1]), discretize(hammy[,18])), discretize(hammy[,20]))
-# 
-# condin4 <- rep(NA, 19)
-# for (i in 1:19){
-#   condin4[i] <- condinformation(S=discretize(hammy[,i]), 
-#                                 Y=discretize(hammy[,20]), 
-#                                 X=cbind(discretize(hammy[,1]),
-#                                         discretize(hammy[,12]),
-#                                         discretize(hammy[,19])))
-# }
-# condin4 # does this suggest bio2 is best? or bio19? I'm not sure...
-
-```
 
 Okay... next step is probably to run the Maxent model with the glm-derived model, the MI-derived model, and the full model, and compare the outcomes!!! Then use this to make conclusions on the use of information theoretic methods (maybe?) and importance of variable selection in SDM. Actually, maybe you could/should also do a projection with the different models and look at the results there. Remember: for projections, the fewer predictors, the better it should be because you're not compounding error or projecting onto as many novel climate combos. Right?
-
-Also try LASSO using glmnet!!!
-
-But then what will I bootstrap... I can't completely ignore frequentist statistics here.
-
-```{r LASSO}
-# see here: http://web.stanford.edu/~hastie/glmnet/glmnet_alpha.html
-hammybcmatrix <- as.matrix(hammy[,-20])
-hammy.lasso <- glmnet(hammybcmatrix, hammy[,20], family="binomial") # Logistic regression
-
-plot(hammy.lasso, label=TRUE)
-hammy.lasso
-
-hammy.lasso.fit <- cv.glmnet(hammybcmatrix, hammy[,20], family="binomial", type.measure="class")
-plot(hammy.lasso.fit)
-
-step(hammy.mutinfo)
-```
 
 To do: use predict() with four different models: null (where you shuffle presence/absence or coordinates?), all 19, MI-selected model, and glm step()-selected model. Compare outcomes. Do this by selecting, I dunno, 100 or so random points across the raster and predict with the given model whether Spea would be present or absent there based on the bioclim variables at the particular site. Or could use it as implemented in dismo do just do it explicitly spatially.
 
 ```{r code for generating the random background points as test points or nevermind just use the raster prediction}
-#speasel, the subsampled set, can be used as the ENMeval input...
 circ <- circles(hammy.ll, d=300000, lonlat=TRUE) #creates circles of 100km radius around presence points; will draw pseudoabsences from these buffers
 discirc <- gUnaryUnion(circ@polygons) #dissolve circle features into one feature
 circ2 <- spTransform(discirc, CRS("+proj=longlat +datum=WGS84")) #changes CRS to match that of speaspdf
@@ -943,12 +590,22 @@ spplot(hammyPredict.mi.nh)
 
 ```{r model evaluation}
 
-ee <- evaluate(spea2, absent2, hammy.glm.mi)
+# ee <- evaluate(spea2, absent2, hammy.glm.mi)
+# 
+# plot(ee, "ROC")
+# plot(ee, "TPR")
+# boxplot(ee)
+# density(ee)
 
-plot(ee, "ROC")
-plot(ee, "TPR")
-boxplot(ee)
-density(ee)
+e.full <- evaluate(spea2, absent2, hammy.glm)
+
+e.mi <- evaluate(spea2, absent2, hammy.glm.mi)
+
+e.step <- evaluate(spea2, absent2, hammy.glm.step)
+
+plot(e.full, "ROC") # AUC = 0.927
+plot(e.mi, "ROC") # AUC = 0.902
+plot(e.step, "ROC") # AUC = 0.923
 
 ```
 
