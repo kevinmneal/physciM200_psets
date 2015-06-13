@@ -1,121 +1,48 @@
 ---
-title: "Variable selection for species distribution modeling, and diving into the MaxEnt black box"
+title: "Variable selection for species distribution modeling: an example with the western spadefoot toad"
 author: "Kevin Neal"
-date: "June 2, 2015"
+date: "June 12, 2015"
 output: 
   html_document:
     fig_caption: yes
-    fig_width: 8
+    fig_width: 10
+    fig_height: 8
+    
 ---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+```
 
 ```{r init, echo=F, include=F}
-require(vioplot) || {install.packages("vioplot"); library(vioplot)}
-require(dplyr)
-require(tidyr)
-require(reshape2)
 require(minerva)
 require(infotheo)
 require(corrplot)
-require(glmnet)
+require(dismo)
+require(raster)
+#require(glmnet)
 
 setwd("C:/Users/Kevin/Google Drive/UCLA Courses or Lab meetings etc/PhysciM200/physciM200_psets")
+load("C:/Users/Kevin/Google Drive/UCLA Courses or Lab meetings etc/PhysciM200/physciM200_psets/PSM200finalproj.RData") # loads the workspace so knitr doesn't have to re-evaluate everything...
 
 par(mfrow=c(1,1))
-old.par <- par(mar = c(0, 0, 0, 0))
-par(old.par)
 ```
 
-## What is Species Distribution Modeling?
-- statistically predict species distribution based on known occurrences and environmental data
-- useful for:
-    - predicting new localities
-    - understanding climatic niche
-    - predicting past and future distributions
-    
-![Species Distribution Modeling](http://i.imgur.com/EHO6XOf.png?1)
+## INTRODUCTION  
 
-## Doing SDM in MaxEnt
-- MaxEnt: Maximum entropy
-- Generally accepted as the best model for presence-only datasets
-- 3 inputs: occurrence points, background points, environmental layers
-  - Can also use "pseudoabsence" points instead of background points
-- program examines environmental values at occurrence points and background points
-- outputs: prediction map, stats on environmental variable importance and model fit
-
-![Species Distribution Modeling](http://i.imgur.com/EHO6XOf.png?1)
-
-## Utility of SDMs:
-- understand environmental contributions to range limits
-- predict range shift under different climate scenarios
-- estimate past range to explore ancient hybridization with currently-allopatric congeners
-
-## spadefoot toad
-- Spea hammondii - western spadefoot toad
+## Spadefoot toad  
+- _Spea hammondii_ - western spadefoot toad  
 ![Spea hammondii](http://i.imgur.com/PsRfF6F.jpg?1)
 
-## spadefoot toad
-- *spadefoot*
-!["spadefoot"](http://i.imgur.com/Au6eyjP.jpg?1)
 
+***
 
-## Species occurrence points
-- GBIF (Global Biodiversity Information Facility)
-- raw GBIF data: 940 occurrences
-- use spatial grid subsampling to limit effect of sampling bias in the model (are number of samples at a given locality a real indicator of habitat suitability, or an artifact?)
+## Loading the spadefoot toad presence and absence point data:  
 
-## Environmental layers
-- Bioclim variables: biologically-relevant measures of climate
-    - Bio1 to Bio19
-    - e.g. Annual mean temperature (bio1), min temp. of coldest month (bio6), annual precip (bio12), precip of warmest quarter (bio18), etc.
-## Past and present environmental layers
-- can project model fit to current climate data to other climate layers
-
-## Bioclim layers
-- each raster contains a range of values over the map area used in the model
-- imagine all stacked and taking value at a point on top of all - that occurrence point corresponds to a value in all 19 of these layers
-![climate variable values](http://i.imgur.com/2XnNPev.png?1)
-
-## Running the MaxEnt model
-- In addition to prediction maps, can use other methods to test model fit and significance
-- Maxent already implements bootstrapping, for instance, but running it takes awhile
-    - Cross-validation (divide occurrence points into test and training data)
-    - subsampling without replacement
-    - bootstrapping (with replacement)
-    
-## Jackknifing
-- iteratively omit each variable and re-run model to test environmental variable importance
-- can see bio18 (precip of warmest quarter) by itself is the best predictor variable in the model, when I ran it with all 19 variables
-![jackknifing](http://i.imgur.com/o4jH6lo.jpg?1)
-
-## prediction map
-![present distribution](http://i.imgur.com/HILCUgcl.png?1)
-
-## variable contributions
-- bio18: precip of warmest quarter
-- bio19: precip of coldest quarter
-- bio14: precip of driest month
-- bio15: precip seasonality (coeff. of variation)
-![variable contributions](http://i.imgur.com/bEe4FDc.png?1)
-
-## Run model for other scenarios
-![all models](http://i.imgur.com/ec6Ikpp.png?1)
-
-## Hard to really improve on the existing Maxent model...
-- Many publications comparing with other methods; always superior.
-- Goals here, then:
-  - Generate a procedure for removing highly correlated variables
-  - demystify the "black box" that is Maxent!
-
-# Collinearity in environmental variables for species distribution modeling
-
-## To avoid overfitting, want to remove collinear variables before throwing them into the black box
-- overfitting to present conditions could also impact projections on past and future climate scenarios
-
-```{r loading points, echo=F}
+```{r loading points, eval=F}
 # using spea and bioclim variables
-spea.ll <- read.csv("speaLatLonBioclim.csv")
+spea.ll <- read.csv("speaLatLonBioclim.csv") # dataframe generated by extracting bioclim variable values at the latlon coordinates
 spea.ll <- spea.ll[-1]
-spea <- spea.ll[-c(1:2)] # creates spea.bc which is ONLY bioclim variables, no latlon
+spea <- spea.ll[-c(1:2)] # creates spea which is ONLY bioclim variables, no latlon
 
 colnames(spea.ll)[1] <- "lon" # simplifying column names
 colnames(spea.ll)[2] <- "lat"
@@ -145,81 +72,77 @@ allpts <- rbind(spea2, absent2)
 hammy <- allpts # hammy refers to hammondii. This is the dataframe with all the presence AND absence points AND bioclim values. No latlon.
 hammy.ll <- cbind(hammy, rbind(spea.ll[,c(1:2)], absent.ll[,c(1:2)])) # the dataframe INCLUDING latlon. Probably won't need for now.
 
-```
+spea.llonly <- spea.ll[,c(1:2)]
+absent.llonly <- absent.ll[,c(1:2)]
 
-
-### Stepwise regression
-```{r using GLM}
-
-# With GLM: specify binomial family
-
-
-# GLM with presence and absence:
-hammy.glm <- glm(pres ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, family=binomial(link = "logit"), data=hammy)
-summary(hammy.glm)
-step(hammy.glm, direction="backward")
-
-# step() using the logistic glm with OLDER data gives best-fit as: pres ~  bio8 + bio9 + bio10 + bio11 + bio14 + bio15 + bio18 + bio19
-# newer one with fewer absences: bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19
-plot(hammy.glm)
-
-plot(pres~bio8+bio9, data=hammy)
-# anova(spea.glm, spea.lm)
-# confint()
-# predict(hammy.glm, type="response") # confusing...
 
 ```
 
 
+***
+__The nineteen bioclim layers are:__  
+* BIO1 = Annual Mean Temperature  
+* BIO2 = Mean Diurnal Range (Mean of monthly (max temp - min temp))  
+* BIO3 = Isothermality (BIO2/BIO7) (* 100)  
+* BIO4 = Temperature Seasonality (standard deviation *100)  
+* BIO5 = Max Temperature of Warmest Month  
+* BIO6 = Min Temperature of Coldest Month  
+* BIO7 = Temperature Annual Range (BIO5-BIO6)  
+* BIO8 = Mean Temperature of Wettest Quarter  
+* BIO9 = Mean Temperature of Driest Quarter  
+* BIO10 = Mean Temperature of Warmest Quarter  
+* BIO11 = Mean Temperature of Coldest Quarter  
+* BIO12 = Annual Precipitation  
+* BIO13 = Precipitation of Wettest Month  
+* BIO14 = Precipitation of Driest Month  
+* BIO15 = Precipitation Seasonality (Coefficient of Variation)  
+* BIO16 = Precipitation of Wettest Quarter  
+* BIO17 = Precipitation of Driest Quarter  
+* BIO18 = Precipitation of Warmest Quarter  
+* BIO19 = Precipitation of Coldest Quarter  
 
-```{r corrplot, eval=F}
+***
 
+## Correlation plots using MIC and Spearman correlation:  
+
+```{r corrplot figures, results="hide"}
+
+pairs(hammy, cex=0.4, pch=20, gap=0.3)
+
+par(mfrow=c(1,1))
 corrplotMIC <- corrplot(mine(hammy)$MIC, main="MIC")
 corrplotSpear <- corrplot(cor(hammy, method="spearman", use="pairwise.complete.obs"), main="spearman")
-
-par(mfrow=c(1,2))
-corrplot(corrplotMIC)
-corrplot(corrplotSpear)
 ```
 
-```{r corrplot figures}
-par(mfrow=c(1,2))
-corrplot(corrplotMIC)
-corrplot(corrplotSpear)
-```
+### In the corrplots, notice the strong correlations between several variable pairs. In the optimized models, it is unlikely that both of a highly correlated pair will be included because after including one, the second will contribute little to no new information to the model.  
 
 
+***
 
-### Latest update! June 9, 11pm
-Use this paper's method to use mutinformation to select the best model!: http://research.ics.aalto.fi/eiml/Publications/Publication136.pdf (Ivannikova et al)
+## Mutual information variable selection (sensu Ivannikova et al.) with forward steps:  
 
-by iteratively adding variables to the function. Goal is to maximize the information, with X as the variables and Y as the dependent variable (i.e. presence/absence). X is the bioclim variables. You start with running mutinformation() on the whole matrix and see which single variable has the highest mutual information value with the presence variable. This is your first variable selected. Subsequently, you will look for the greatest information addition adding a single other variable. To do this you will use cbind to put two variables in the X argument in mutinformation, and do this across all remaining variables to find the highest combination of information with your first selected variable. Like so:
+```{r mutual information variable selection with forward steps, eval=F}
 
-# But also check Tan and Jiang 2014: Model selection method based on maximal information coefficient of residuals (p. 590)
-
-
-```{r mutual information variable selection with forward steps}
-require(infotheo)
-
-hammy.mutinfo <- mutinformation(discretize(hammy)) # bio1 has highest mutual info
 # corrplot(hammy.mutinfo/max(hammy.mutinfo)) # corrplot requires values between -1 and 1. I only did this to see how its patterns compare with using the mine() function in minerva
-corrplot(corrplotMIC)
-max(hammy.mutinfo)
 
-hammybc <- hammy[,-20]
+hammy.mutinfo <- mutinformation(discretize(hammy)) # bio1 has highest mutual info, i.e. strongest correlation with presence
+hammy.mutinfo[,20]
+
+#hammybc <- hammy[,-20]
 #mutinformation(discretize(hammybc), discretize(hammy[,20])) # MI = 0.631 including all variables
 
-mutinformation(cbind(discretize(hammy[,1]), discretize(hammy[,2])), discretize(hammy[,20], nbins=2)) # if here for example we had chosen bio2 as our X1, we add each other bioclim to it to test the information gained. The variable that leads to the highest gain is X2. Then do the same to find X3, and so on. Do this until the information goes DOWN!!! If it never goes down, then the model with all 19 variables is the best...
+# mutinformation(cbind(discretize(hammy[,1]), discretize(hammy[,2])), discretize(hammy[,20], nbins=2)) # if here for example we had chosen bio2 as our X1, we add each other bioclim to it to test the information gained. The variable that leads to the highest gain is X2. Then do the same to find X3, and so on. Do this until the information goes DOWN!!! If it never goes down, then the model with all 19 variables is the best...
 # this example is still using dummy-absences, though. Get "true"" pseudoabsences AND add more presences by doing smarter spatial sampling... though this is a whole can of worms... 
 
 # I can apply bootstraps to every step here... hmm then get confidence intervals on the MI of every added variable? One with highest median moves on?
 
+# mutin1 accomplishes the same thing as just running mutinformation(discretize(hammy))
 mutin1 <- rep(NA, 19)
 for (i in 1:19){
   mutin1[i] <- mutinformation(discretize(hammy[,i]), discretize(hammy[,20]))
 }
 mutin1
-rank(mutin1) # bio1 by itself has most mutual information with presence, so bio1 becomes X1. MI = 0.2386
+#rank(mutin1) # bio1 by itself has most mutual information with presence, so bio1 becomes X1. MI = 0.2386
 
 
 
@@ -231,43 +154,9 @@ for (i in 1:19){
 mutin2 # bio12 increases the information the most, so bio12 becomes X2. MI = 0.3576
 
 
-mutin3 <- matrix(nrow=1000, ncol=19)
-#mutin3 <- rep(NA, 100)
-
-### PERMUTING the variable selection... but does it make sense to do this vs. using ALL the points? More points = more information... the permuting or bootstrapping should only really be useful if you're trying to decide if sample size affects the variable selection. Right?...
-## Can use unique() with replacement sampling, but this means the sample size will change between replicates.
-## But is that better or worse than pulling a sample of an arbitrary fraction of the total???
-for(j in 1:1000) {
-  hamboot <- rbind(hammy[sample(nrow(hammy[hammy$pres==1,]), 50, replace=F),], hammy[sample(nrow(hammy[hammy$pres==0,]), 100, replace=F),]) # use unique to avoid weighting certain localities higher than others
-  mutin <- rep(NA, 19)
-  for(i in 1:19){
-    mutin[i] <- mutinformation(cbind(discretize(hamboot[,1]), discretize(hamboot[,12]), discretize(hamboot[,i])), discretize(hamboot[,20]))
-  }
-  mutin3[j,] <- mutin
-}
-
-# do duplicates affect MI?
-hamboottest <- rbind(hammy[sample(nrow(hammy[hammy$pres==1,]), 88, replace=T),], hammy[sample(nrow(hammy[hammy$pres==0,]), 176, replace=T),])
-test.383<- mutinformation(discretize(hamboottest))
-test.384<- mutinformation(discretize(unique(hamboottest)))
-test.383[,20]
-test.384[,20]
-### Yes, as expected, duplicates change the MI. So if goal is to a priori keep localities at same weight, must use unique() or sample without replacement
-
-medianCI <- function(data){ # throw in apply() to quickly get the median and 95% CI as a coherent output
-  medci <- cbind(median(data), 
-        quantile(data, 0.025),
-        quantile(data, 0.975))
-  colnames(medci) <- c("median", "low", "upp")
-  return(medci)
-}
-
-mutin3CI <- apply(mutin3, 2, medianCI)
-mutin3CI
-rank(mutin3CI[1,]) # remember, ranks are backwards!!! so rank ninteenth is the BEST, not first
-
 ## Then I suppose, compare the third most-informative variable (X3) determined from permuted medians to the one calculated with ALL the points.
 ## Here: permuted best X3 is bio2
+mutin3 <- rep(NA, 19)
 for(i in 1:19){
     mutin3[i] <- mutinformation(cbind(discretize(hammy[,1]), discretize(hammy[,12]), discretize(hammy[,i])), discretize(hammy[,20]))
   }
@@ -391,45 +280,13 @@ rank(mutin9) # no additional information... so the current model should be the b
 # This model has as much information as the model with all 19 variables!
 ```
 
-# in this example, bio12 adds the most information. Notice bio1 and bio2, which are already included as variables, do not increase the information if added a second time because that information is already there, and the algorithm is smart enough to realize.
-# then we would move on to 4 variables, 5 variables, etc etc...
-# So if you want to make this rigorous, can bootstrap (maybe without replacement because of the spatial autocorrelation stuff...) the mutual information by running 1000 permutations with random subsets of the localities.
-
-# I think the biggest challenge here will be the pseudoabsence selection. Will have to select outside Spea's range to better reflect them as true absences. So do like, 500 random background points on California and surrounding, and then mask out anything in close proximity to true presences.  
-
-# After using mutinformation to select variables, can test against step() with lm and glm? and other methods? And then run an actual maxent run and compare the results/compare to a full run with 19 variables???  
-Other things I could bootstrap: the actual occurrence points. Wait, didn't I already say I would do that? Yes... but Maxent itself can do that... so idk
-
-# For absence points I'm going to randomly sample ~ 250 points from the background raster, and then clip out anything that falls within a ~10 km radius of presence points... is this biasing it? idk. Maybe use an even smaller radius... so I won't show the full procedure for that here, and will just import the csv file I make from it.
-
-```{r putting the variable selection methods in one place...}
-hammy.glm <- glm(pres ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, family=binomial(link = "logit"), data=hammy)
-summary(hammy.glm)
-step(hammy.glm, direction="backward")
-
-# using step() with glm, get lowest AIC with pres ~ bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19
-hammy.glm.step <- glm(pres ~ bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19, family=binomial(link = "logit"), data=hammy)
-summary(hammy.glm.step)
-
-# best model using MI: pres ~ bio1, bio2, bio4, bio12, bio15, bio16, bio17, bio18
-# as an aside: the order you put variables into the glm with + doesn't matter...
-hammy.glm.mi <- glm(pres ~ bio1 + bio12 + bio2 + bio17 + bio4 + bio15 + bio16 + bio18, family=binomial(link = "logit"), data=hammy)
-summary(hammy.glm.mi)
-
-```
-
-One of the sources suggests that regression techniques do better with LOTS of background/absence points, while machine learning methods do better with fewer (fewer absence than presence). Presumably the method with MI would be machine learning, because it uses information theory...? So should I redo with fewer absence points???
-Barbet-Massin et al. 2012, Methods in Ecol and Evol. "Selecting pseudo-absences for species distribution models: how, where, and how many?"
-"For classification and machine-learning techniques, the number of pseudo-absences had the greatest impact on model accuracy, and averaging several runs with fewer pseudo-absences than for regression techniques yielded the most predictive models.
-
-# So: best to do permutations with mutual information???
+### Using mutual information, I identified eight predictors that have as much information as all nineteen! (MI = 0.631 eith these eight and remains at 0.631 with the addition of any other predictors)    
+### The chosen predictors differ from those chosen by step(), interestingly (evaluated below).  
 
 
-Okay... next step is probably to run the Maxent model with the glm-derived model, the MI-derived model, and the full model, and compare the outcomes!!! Then use this to make conclusions on the use of information theoretic methods (maybe?) and importance of variable selection in SDM. Actually, maybe you could/should also do a projection with the different models and look at the results there. Remember: for projections, the fewer predictors, the better it should be because you're not compounding error or projecting onto as many novel climate combos. Right?
 
-To do: use predict() with four different models: null (where you shuffle presence/absence or coordinates?), all 19, MI-selected model, and glm step()-selected model. Compare outcomes. Do this by selecting, I dunno, 100 or so random points across the raster and predict with the given model whether Spea would be present or absent there based on the bioclim variables at the particular site. Or could use it as implemented in dismo do just do it explicitly spatially.
 
-```{r code for generating the random background points as test points or nevermind just use the raster prediction}
+```{r code for generating the random background points as test points or nevermind just use the raster prediction, eval=F, include=F}
 circ <- circles(hammy.ll, d=300000, lonlat=TRUE) #creates circles of 100km radius around presence points; will draw pseudoabsences from these buffers
 discirc <- gUnaryUnion(circ@polygons) #dissolve circle features into one feature
 circ2 <- spTransform(discirc, CRS("+proj=longlat +datum=WGS84")) #changes CRS to match that of speaspdf
@@ -445,7 +302,8 @@ plot(maskedcirc)
 plot(circ3)
 points(speasel)
 
-# the background points vary too much... constrain the area to a radius around presence points. 
+# the background points vary too much? constrain the area to a radius around presence points. 
+## POST-EDIT: Don't constrain it next time!!! Sample from across the full landscape.
 b1 <- bclim2.5Shamnarrow[[1]]
 plot(b1)
 rr <- mask(b1, circ3)
@@ -469,17 +327,39 @@ points(absent5, col="blue")
 absent.variables <- extract(bclim2.5Shamnarrow, absent5)
 speaabsent.latlon.bio <- cbind(coordinates(absent5), absent.variables)
 write.csv(speaabsent.latlon.bio, file="speaabsentLatLonBioclim.csv")
-
+# I did this with the presence points as well, but in a different R script file
 
 
 ```
 
-```{r putting the variable selection methods in one place}
+***
+
+## GLM models:  
+
+```{r putting the variable selection methods in one place, eval=F}
 hammy.glm <- glm(pres ~ bio1+bio2+bio3+bio4+bio5+bio6+bio7+bio8+bio9+bio10+bio11+bio12+bio13+bio14+bio15+bio16+bio17+bio18+bio19, family=binomial(link = "logit"), data=hammy)
 summary(hammy.glm)
 step(hammy.glm, direction="backward")
 
-# bootstrapped model
+# using step() with glm, get lowest AIC with pres ~ bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19
+hammy.glm.step <- glm(pres ~ bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19, family=binomial(link = "logit"), data=hammy)
+summary(hammy.glm.step)
+
+# best model using MI: pres ~ bio1, bio2, bio4, bio12, bio15, bio16, bio17, bio18
+# as an aside: the order you put variables into the glm with + doesn't matter...
+hammy.glm.mi <- glm(pres ~ bio1 + bio12 + bio2 + bio17 + bio4 + bio15 + bio16 + bio18, family=binomial(link = "logit"), data=hammy)
+summary(hammy.glm.mi)
+
+
+```
+
+***
+
+## Bootstrap functions:  
+### These functions bootstrap resample from the presence points and from the absence points separately (so each iteration keeps the same number of presence and absence points), and the model is re-run with the resampled datapoints. The output is the map of the median probability of all bootstrapped predictions:  
+
+```{r bootstrap functions}
+## bootstrapped model
 
 bootPredict <- function(rasterbrick, model, present=spea2, absent=absent2, reps=10){ # will use spea2 and absent2
   bootpreds <- replicate(reps, {
@@ -513,43 +393,19 @@ bootPredict.nh <- function(rasterbrick, model, locs=hammy, reps=10){ # will use 
   #confintpred <- calc(brick(bootpreds), fun=quantile, probs=c(0.025, 0.975))
   invisible(stack(medianpred.nh, madpred.nh))
 }
-
-
-
-# bootstrapped NHST
-testtt.nh <- replicate(10, {
-  data <- apply(hammy, 2, sample) # shuffles data within columns for doing NHST
-  cor(data, method="spearman")
-})
-
-# using step() with glm, get lowest AIC with pres ~ bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19
-hammy.glm.step <- glm(pres ~ bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19, family=binomial(link = "logit"), data=hammy)
-summary(hammy.glm.step)
-
-# best model using MI: pres ~ bio1, bio2, bio4, bio12, bio15, bio16, bio17, bio18
-# as an aside: the order you put variables into the glm with + doesn't matter...
-hammy.glm.mi <- glm(pres ~ bio1 + bio12 + bio2 + bio17 + bio4 + bio15 + bio16 + bio18, family=binomial(link = "logit"), data=hammy)
-summary(hammy.glm.mi)
-
-
-hammynhtest <- apply(hammy, 2, sample, replace=F)
-hammynhtest <- data.frame(hammynhtest)
-corrplot(cor(hammynhtest, method="spearman"))
-corrplot(cor(hammy, method="spearman"))
-corrplot(mine(hammynhtest)$MIC)
-
-mutinformation(discretize(hammynhtest))
 ```
 
-```{r predictions}
+***
 
+## Model predictions:  
+### the package "raster" allows for explicit spatial prediction using the values in the variable rasters/maps  
 
-library(dismo)
-library(raster)
+```{r predictions, eval=F}
+
 # ?predict (use it as implemented in raster package, not dismo)
 # bootstrap the predictions and plot the median
 
-bclimRaster <- brick("C:/Users/Kevin/Google Drive/UCLA Courses or Lab meetings etc/EEB 234/Final Project files/bioclim2.5/ShamnarrowBC_2.5.grd")
+bclimRaster <- brick("C:/Users/Kevin/Google Drive/UCLA Courses or Lab meetings etc/EEB 234/Final Project files/bioclim2.5/ShamnarrowBC_2.5.grd") # this contains the raster maps of all 19 climate variables
 
 bclimRaster.mi <- bclimRaster[[c(1,2,4,12,15,16,17,18)]] #bio1, bio2, bio4, bio12, bio15, bio16, bio17, bio18
 bclimRaster.glm.step <- bclimRaster[[c(1,4,9,14,15,17,18,19)]] #bio1 + bio4 + bio9 + bio14 + bio15 + bio17 + bio18 + bio19
@@ -558,38 +414,135 @@ hammyPredict.glm.step <- predict(bclimRaster.glm.step, hammy.glm.step, type="res
 hammyPredict.mi <- predict(bclimRaster.mi, hammy.glm.mi, type="response")
 hammyPredict.full <- predict(bclimRaster, hammy.glm, type="response")
 
-plot(hammyPredict.mi, main="variables selected using forward-stepping mutual information")
-plot(hammyPredict.glm.step, main="variables selected using stepwise glm regression")
-plot(hammyPredict.full, main="all 19 variables in glm")
 
-plot(hammy.glm.mi)
-plot(predict(hammy.glm.mi, type="response")) # these are the model's predictions of the actual datapoints (x is probability of presence, x is index of the datapoints. 1-88 are true presences; 89+ are pseudoabsences... interesting.)
-
-# bootstrap the models and take the median over all predictions. Print the confidence intervals, too (or just madam)
+# bootstrap the models and take the median over all predictions. Print MAD as well.
 hammyPredict.full.boot <- bootPredict(bclimRaster, hammy.glm, reps=100)
-spplot(hammyPredict.full.boot, names.attr=c("median GLM prediction, 10 bs, 19 vars", "MAD"))
+hammyPredict.full.nh <- bootPredict.nh(bclimRaster, hammy.glm, reps=100)
 
 hammyPredict.glm.step.boot <- bootPredict(bclimRaster.glm.step, hammy.glm.step, reps=100)
-p2 <- spplot(hammyPredict.glm.step.boot)
+hammyPredict.glm.step.nh <- bootPredict.nh(bclimRaster.glm.step, hammy.glm.step, reps=100)
 
 hammyPredict.mi.boot <- bootPredict(bclimRaster.mi, hammy.glm.mi, reps=100)
-p3 <- spplot(hammyPredict.mi.boot)
-# try threshold() and response() on the predicted objects/rasters
-
-?plot
-
-par(mfrow=c(1,3))
-plot(hammyPredict.mi, col=heat.colors(50), main="GLM prediction, 19 vars")
-plot(hammyPredict.mi.boot[[1]], col=heat.colors(50), main="median of 100 BS") # explain how you bootstrapped
-plot(hammyPredict.mi.boot[[2]], col=heat.colors(50), main="MAD across 100 BS") 
-
 hammyPredict.mi.nh <- bootPredict.nh(bclimRaster.mi, hammy.glm.mi, reps=100)
-spplot(hammyPredict.mi.nh)
 
 ```
 
-```{r model evaluation}
+***
+***
 
+## The following maps show __probability of occurrence__ projected across the study area. Because absences/pseudoabsences were not sampled from the entire study area, the model often stumbles in areas of novel climate (see e.g. lower right in all maps).  
+
+## GLM model with all 19 predictors:  
+
+```{r plotting full GLM model, echo=F}
+par(mfrow=c(1,2))
+plot(hammyPredict.full, col=heat.colors(50), main="probs, 19var GLM")
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+plot(hammyPredict.full.boot[[1]], col=heat.colors(50), main="bootmedian, 19var GLM") # explain how you bootstrapped
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+# plot(hammyPredict.full.boot[[2]], col=heat.colors(50), main="bootMAD, 19var GLM") 
+# points(spea.llonly, pch="+")
+# points(absent.llonly, pch="-")
+# legend("topright", legend=c("+  pres", "-  abs"))
+
+par(mfrow=c(1,2))
+plot(hammyPredict.mi.boot[[1]], col=heat.colors(50), main="bootmedian, 19var GLM") 
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+plot(hammyPredict.full.nh[[1]], col=heat.colors(50), main="bootmedian, 19var GLM, null") 
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+```
+
+***
+
+## GLM model with stepwise-determined predictors:  
+
+```{r plotting step GLM model, echo=F }
+par(mfrow=c(1,2))
+plot(hammyPredict.glm.step, col=heat.colors(50), main="probs, step GLM")
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+plot(hammyPredict.glm.step.boot[[1]], col=heat.colors(50), main="bootmedian, step GLM") # explain how you bootstrapped
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+# plot(hammyPredict.glm.step.boot[[2]], col=heat.colors(50), main="bootMAD, step GLM") 
+# points(spea.llonly, pch="+")
+# points(absent.llonly, pch="-")
+# legend("topright", legend=c("+  pres", "-  abs"))
+
+par(mfrow=c(1,2))
+plot(hammyPredict.mi.boot[[1]], col=heat.colors(50), main="bootmedian, MI best GLM") 
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+plot(hammyPredict.mi.nh[[1]], col=heat.colors(50), main="bootmedian, MI best GLM, null") 
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+```
+
+***
+
+## GLM model with MI-selected predictors:   
+
+```{r plotting MI GLM model, echo=F }
+par(mfrow=c(1,2))
+plot(hammyPredict.mi, col=heat.colors(50), main="probs, MI best GLM")
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+plot(hammyPredict.mi.boot[[1]], col=heat.colors(50), main="bootmedian, MI best GLM") 
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+# plot(hammyPredict.mi.boot[[2]], col=heat.colors(50), main="bootMAD, MI best GLM") 
+# points(spea.llonly, pch="+")
+# points(absent.llonly, pch="-")
+# legend("topright", legend=c("+  pres", "-  abs"))
+
+par(mfrow=c(1,2))
+plot(hammyPredict.mi.boot[[1]], col=heat.colors(50), main="bootmedian, MI best GLM") 
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+plot(hammyPredict.mi.nh[[1]], col=heat.colors(50), main="bootmedian, MI best GLM, null") 
+points(spea.llonly, pch="+")
+points(absent.llonly, pch="-")
+legend("topright", legend=c("+  pres", "-  abs"))
+#plot(hammyPredict.mi.nh[[2]], col=heat.colors(50), main="bootMAD, MI best GLM, null") 
+#points(spea.llonly, pch="+")
+#points(absent.llonly, pch="-")
+#legend("topright", legend=c("+  pres", "-  abs"))
+
+```
+
+
+***
+
+## Model probabilities of occurrence at the data used to generate the model itself. Index 1-88 are true presences (actual prob=1) and 89+ are pseudoabsences (actual prob=0): 
+
+```{r model evaluation at input localities, echo=F}
+par(mfrow=c(1,3))
+plot(predict(hammy.glm, type="response"), main="full GLM predictions at inputs") # these are the model's predictions of the actual datapoints (x is probability of presence, x is index of the datapoints. 1-88 are true presences; 89+ are pseudoabsences... interesting.)
+plot(predict(hammy.glm.step, type="response"), main="step GLM pred at inputs")
+plot(predict(hammy.glm.mi, type="response"), main="MI GLM pred at inputs")
+```  
+
+***
+
+## Area under ROC curve for all three models:  
+
+```{r AUC evaluation, echo=F}
+par(mfrow=c(1,3))
 # ee <- evaluate(spea2, absent2, hammy.glm.mi)
 # 
 # plot(ee, "ROC")
@@ -603,10 +556,26 @@ e.mi <- evaluate(spea2, absent2, hammy.glm.mi)
 
 e.step <- evaluate(spea2, absent2, hammy.glm.step)
 
-plot(e.full, "ROC") # AUC = 0.927
-plot(e.mi, "ROC") # AUC = 0.902
-plot(e.step, "ROC") # AUC = 0.923
+plot(e.full, "ROC", sub="full GLM AUC") # AUC = 0.927
+title(main="full GLM", line=3)
+plot(e.step, "ROC", sub="step GLM AUC") # AUC = 0.923
+title(main="step GLM", line=3)
+plot(e.mi, "ROC", sub="MI GLM AUC") # AUC = 0.902
+title(main="MI GLM", line=3)
 
 ```
 
+### Receiver operating characteristic curves of the three models examined. The area under these curves is assumed to be a measure of model performance, with higher AUC indicating a better model. AUC are only comparable across models using same presence and absence points and the same areal extent. With the highest AUC of 0.927, the GLM model with all 19 bioclim variables performs the best, though this may come at a cost of generalizability to novel climate spaces.  
+
+***
+
+```{r model comparison, eval=F, include=F}
+## Are these models actually significantly different from one another?
+# these only make sense if the models are nested, so can only compare the full 19var model with the other two
+anova(hammy.glm.mi, hammy.glm, test="Cp") # Cp gives AIC. full glm is better.
+anova(hammy.glm.mi, hammy.glm, test="Chisq") # significant p-value (0.0012)
+anova(hammy.glm.step, hammy.glm, test="Cp") # Cp gives AIC. glm.step is better.
+anova(hammy.glm.step, hammy.glm, test="Chisq") # non-significant p-value (0.938)
+
+```
 
