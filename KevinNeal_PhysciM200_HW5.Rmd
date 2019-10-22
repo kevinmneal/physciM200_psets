@@ -1,7 +1,7 @@
 ---
 title: "HW5"
 author: "Kevin Neal"
-date: "May 12, 2015"
+date: "due May 12, 2015"
 output: 
   html_document:
     fig_caption: yes
@@ -30,33 +30,260 @@ par(mfrow=c(1,1))
 ## Import data and reformat to contingency table
 ```{r import hospital data and reformat}
 hosp.raw <- read.csv("Hospitals.csv")
-head(hosp.raw, 10)
-str(hosp.raw)
+#head(hosp.raw, 10)
+#str(hosp.raw)
 hosp.raw[,1] <- as.character(hosp.raw[,1]) # changes "Type" column from factors to strings. Change back to factors after conversion...?
-unique(hosp.raw[1]) # need to combine MORT, COMP, and SURV by hospital
+#unique(hosp.raw[1]) # need to combine MORT, COMP, and SURV by hospital
 for (ii in c("COMP", "SURV", "MORT")){
   hosp.raw[grep(ii, as.character(hosp.raw[,1])),1] <- ii # prints the row indices of COMP-; use this to combine all these rows 
 }
+head(hosp.raw)
 # want sum of Type, by location...
-hosp.raw[,1] <- as.factor(hosp[,1])
+hosp.raw[,1] <- as.factor(hosp.raw[,1])
 hosp <- acast(hosp.raw, Location ~ Type, fun.aggregate=sum, value.var="Counts") # cast "hosp" dataframe with rows corresponding to Location and columns to Type, and summing Counts by their Type that corresponds to a Location. Output is desired contingency table.
-
-
+#head(hosp)
+#str(hosp)
 colnames(hosp) <- c("Compl", "Dead", "Surv")
-colnames(hosp)
-hosp.c <- hosp[,c(2,1,3)] # reorder contingency table to Locations, Dead, Complications, Survived
-rownames(hosp) <- c("Cedars.Sinai", "Kaiser.LA", "UCLA.Harbor", "UCLA.OliveView", "UCLA.RonaldReagan", "UCLA.SantaMonica") # change rownames
-hosp.c <- hosp[c(1,3,4,5,6,2),] # reorder rows to match those on the problem set handout and check accuracy
-head(hosp)
-
+#colnames(hosp)
+hosp <- hosp[,c(2,1,3)] # reorder contingency table to Locations, Dead, Complications, Survived
+#rownames(hosp) <- c("Cedars.Sinai", "Kaiser.LA", "UCLA.Harbor", "UCLA.OliveView", "UCLA.RonaldReagan", "UCLA.SantaMonica") # change rownames
+hosp <- hosp[c(1,3,4,5,6,2),] # reorder rows to match those on the problem set handout and check accuracy
+#head(hosp)
+hos <- hosp
 
 ```
 
 ## Test for associations between hospital location and survival status using Fisher's Exact test
-```{r Fisher's exact text}
-fisher.test(hosp)
-?fisher.test
+```{r Fishers exact text}
+# combine survived and compl columns into a single survived column. I don't even know if this is necessary...
+hos2 <- as.data.frame(hosp) # change back to data frame to allow for adding columns
+hos2[,4] <- hos2[,2] + hos2[,3]
+colnames(hos2)[4] <- "Alive"
+hos3 <- hos2[,c(1,4)]
+hos3 # dataframe with just two columns for Dead and Alive (combined Compl and Surv columns)
+str(hos3)
+hos[,2] + hos[,3] 
+#fisher.test(hos3, workspace=1e9)
+# doesn't work with included R function...
+
+fisher.test(hosp, hybrid=T)
+
+hosp[c(1,c(2,3)),c(1,2)]
+
+### break it down into pieces for pairwise comparisons...
+
+for (i in 1:(3-1))
+  for (k in i+1:(3-1))
+    
+risk[[i]]/risk[[i+1]] # ???
+
+hosp[7]
+
+
+as.numeric(hosp)
+Job
+str(Job)
+str(hosp)
+hospmaybe <- apply(hosp, c(1,2), as.numeric) # convert int to num and keep matrix 
+str(hospmaybe)
+
+fisher.test(hosp, simulate.p.value = T, B=1e5) # this is the only way to get it to work! N's are too big, maybe?
+fisher.test(hospmaybe, )
+apply(hosp[,c(1,2)], 1, fisher.test)
+apply(as.matrix(hosp[,c(1,2)]), 1, function(x) fisher.test(matrix(x,nc=4)))
+hos3
+hosp[,c(1,2)]
+```
+
+Fisher's exact test has trouble with these data, but we have high sample size anyway so it would be overly conservative.
+
+```{r bootstrap chi square and KL}
+# Exp <- rowSums(hosp) %o% colSums(hosp) / N
+# can think of the outer product as the expected table of two dimensions
+
+# hosp is our observed contingency table; exp is our expected contingency table
+
+# The hosp 6x3 contingency table is already in the right format. I.e. format of hosp = tisum's, so go from there.
+
+# making our own Chi-square function:
+x2.fun <- function( E, O ){
+  sum(((O-E)^2) / E)
+}
+
+# can use absolute value instead of square to limit bias in datasets with outliers
+x2.abs <- function( E, O ){
+  sum((abs(O-E)) / E)
+}
+
+hexp <- expand.grid(dimnames(hosp))[rep(1:18, hosp),] # expand.grid expands hosp into two dimensions. Taking the 18 numbers in hosp (because 6 by 3 in hosp) and converting them into their corresponding hospital and survival status
+# Result is two-column dataframe with no numbers. Now want to know how many you have in total
+# doing rep(1:18, hosp) gives you repeats of indices/rows 1 through 18, and repeats hosp times. The hosp table is 6x3 so there are 18 indices
+
+#str(hexp)
+#head(hexp)
+
+#colnames(hexp) # <- c("Hospital", "Survival") # change factor category name
+hobs <- xtabs(~Var1+Var2, hexp) # Var1 = Hospitals; Var2 = survival status. Not sure how to change these names in dataframe like they are in Titanic dataset... Okay actually hobs is now what the 6x3 hosp object is, except it has Var1 and Var2 names for the factors(?)
+# so the hosp table that is on the homework sheet/the one I made from the raw csv, is the observed table. Calculate Exp from those:
+Exp <- rowSums(hosp) %o% colSums(hosp) / nrow(hexp)
+x2.abs(Exp, hobs) # 3.18 using abs; Now can bootstrap to get significance. hosp and hobs are both the same observed table
+
+# bootstrapping...
+chiabs.boot2<- replicate(1000, {
+  boot <- sample(hexp$Var2, replace=T) # set replace = F if doing marginals/KL
+  hobs.boot <- xtabs(~Var1+boot, hexp) # notice changed Survived to boot here
+  Exp.boot <- colSums(hobs.boot) %o% rowSums(hobs.boot) / nrow(hexp)
+  x2.abs(Exp.boot, hobs.boot)
+  }
+)
+
+# compare your bootstrapped chi squares to observed chi square
+par(mfrow=c(1,1))
+
+obschi <- x2.abs(Exp, hobs) # = 3.18 with Xabs
+hist(chiabs.boot, xlim=c(0,3.5)) # observed chi square value is way off the chart at 5462, so can't really plot
+abline(v=obschi) # 3.18; very significant!
+
+pval.abs <- sum(chiabs.boot>obschi)/1000 # p < 0.001 for Xabs; only 1000 reps because 10000 took too long
+
+# This is the above, but in function form
+# bs.x2 <- function(data, p2=NULL, p1=NULL, reps=10000, replace=T, bs=T){
+# boot.x2 <- replicate(reps, {
+#   boot <- sample(eval(parse(text=paste(deparse(substitute(data)), p2, sep="$"))), replace=T)
+#   obs <- xtabs(eval(parse(text=paste("~", p1, "+boot", sep=""))), data)
+#   exp <- rowSums(obs) %o% colSums(obs) / nrow(data)
+#   sum( (exp-obs)^2 / exp)
+# })
+#   return(boot.x2)
+# }
+
+# data = hexp
+# p2 = "Var2" # i.e. survival
+# p1 = "Var1" # i.e. hospital
+
+# bs <- bs.x2(texp, "Survived", "Class")
+# hist(bs) #notice it looks like the chi-square distribution. Compare observed to critical value
+```
+
+```{r KL Divergence}
+# rerun using Kullback-Liebler Divergence test, with KL = sum(expected*log(expected/observed))
+# KL accounts for the curvature of chi-square space
+KL.test <- function( E, O ){
+  sum(E*log(E/O))
+}
+
+KL.boot<- replicate(1000, {
+  boot <- sample(hexp$Var2, replace=T) # set replace = F if have fixed marginals with small n
+  hobs.boot <- xtabs(~Var1+boot, hexp) # notice changed Survived to boot here
+  Exp.boot <- rowSums(hobs.boot) %o% colSums(hobs.boot) / nrow(hexp)
+  KL.test(Exp.boot, hobs.boot)
+  }
+)
+
+par(mfrow=c(1,1))
+obskl <- KL.test(Exp, hobs) # 1248
+hist(KL.boot)
+abline(v=obskl)
+
+pval.kl <- sum(KL.boot>obskl)/1000 # p < 0.001; only 1000 reps because 10000 took too long
 
 ```
 
+
+```{r relative risk}
+
+
+risk.cal <- function(a, mar=1){a/apply(a, mar, sum)} # mar=1: rowSums; mar=2: colSums
+X2.fun <- function(E,O){sum(((E-O)^2)/E)}
+KL.fun <- function(E,O){sum(E*log(E/O))}
+
+#var<-1
+#mar<-1
+#dat<-hosp
+#var="Dead"
+# I missed something in this function copying it from the slides, so it doesn't work...
+rel.risk <- function(dat, var=1, mar=1) {
+  if (!is.matrix(dat)){
+    dat <- as.matrix(dat)
+  }
+  if(!is.numeric(var)){
+    var<- which(colnames(dat) %in% var)
+  }
+  data <- risk.cal(dat, mar) # calculate risk
+  answer <- NA # dummies for looping
+  names <- NA #dummies for looping
+  for (i in 1:(nrow(data)-1)) { # loop from 1:nrows-1 to prevent getting NAs)
+    for (j in i+1:(nrow(data)-1)){ # loop from i+1:nrows-1+1 to ensure getting the nrow point
+      # calculate risk of rowi to row i+1 and append it to
+      answer <- c(answer, (data[i,var]/data[min(j, nrow(data)), var]))
+      answer <- unique(answer) # grab unique rows
+      names <- c(names,
+                 paste(rownames(data)[i], rownames(data)[min(j, nrow(data))], sep=" vs "))
+      names <- unique(names)
+      }
+    }
+    answer <- answer[-1]
+    names <- names[-1]
+    return(matrix(answer, ncol=1, dimnames=list(Comparison=names, Relative.Risk=colnames(dat)[colnames(dat)==var])))
+    # if going to bootstrap, can exclude the dimnames part
+}
+
+dat.exp <- expand.grid(dimnames(hosp))[rep(1:18, as.matrix(hosp)),] # same as hexp above
+risk.table <- risk.cal(hosp)
+risk.exp <- expand.grid(as.matrix(risk.table))[rep(1:18, as.matrix(hosp)),]
+RR.table <- rel.risk(hosp, var="Dead")
+# for bootstrap chisquare: 
+#N <- nrow(dat.exp)
+#R <- 10000 # repeats for the chi square bootstrap
+
+# in sample() portion of chi.boot, insert prob=risk.exp
+# boot <- sample(dat.exp$Status, replace=T, prob=risk.exp) # or use replace=F? check notes
+head(dat.exp)
+#hosp
+
+relative.risk.boot <- replicate(1000, {
+  boot <- sample(dat.exp$Var2, replace=T, prob=risk.exp) # making replace=FALSE makes it a null hypothesis...
+  obs.boot <- xtabs(~Var1+boot, dat.exp)
+  rel.risk(obs.boot, var="Dead")
+  }
+)
+
+CI <- cbind(rep(NA, 15), rep(NA, 15))
+for (i in 1:length(relative.risk.boot[,,1])) {
+  CI[i,] <- c(sort(relative.risk.boot[i,,])[[0.05*1000/2]], sort(relative.risk.boot[i,,])[[(1-0.05)*1000/2]])
+}
+
+colnames(CI) <- c("lowCI", "uppCI")
+RR.table
+RR.CI <- cbind(RR.table, CI)
+colnames(RR.CI)[1] <- "RR.obs"
+#RR.table
+
+RR.pval.1sided <- rep(NA, 15)
+for (i in 1:15){
+  RR.pval.1sided[i] <- if(RR.table[i]>1) {
+    length(which(relative.risk.boot[i,,]>RR.table[i]))/length(relative.risk.boot[i,,])
+  } else {
+    length(which(relative.risk.boot[i,,]<RR.table[i]))/length(relative.risk.boot[i,,])
+  }
+}
+  
+RR.CI.pval <- cbind(RR.CI, RR.pval.1sided)
+RRlog.CI.pval <- cbind(RR.CI.pval, log(RR.CI.pval[,1]))
+colnames(RRlog.CI.pval)[5] <- "logRR.obs"
+RRlog.CI.pval <- RRlog.CI.pval[,c(1,5,2,3,4)]
+RRlog.CI.pval
+#signifRR <- rownames(as.data.frame(which(RRlog.CI.pval[,5]<=0.05)))
+#rownames(as.data.frame(signifRR))
+#rownames(as.data.frame(which(RRlog.CI.pval[,5]<=0.05)))
+
+```
+
+See most significant disparities with:  
+`r rownames(as.data.frame(which(RRlog.CI.pval[,5]<=0.05)))`
+
+Kaiser LA has the greatest relative risk among all comparisons, with 1-sided pvalue < 0.001 in every comparison.  
+
+In the table, RR.obs = observed relative risk; logRR.obs = log(RR.obs) (makes it easier to compare negative and positive relative risks by converting to a symmetrical distribution); low and uppCI = 95% confidence intervals around untransformed RR.obs; RR.pval.1sided = 1-sided p-value.  
+`r RRlog.CI.pval`
 
